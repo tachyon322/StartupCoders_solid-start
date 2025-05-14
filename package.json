@@ -1,0 +1,29 @@
+{
+  "name": "example-basic",
+  "type": "module",
+  "scripts": {
+    "dev": "vinxi dev",
+    "build": "vinxi build",
+    "start": "vinxi start",
+    "version": "vinxi version"
+  },
+  "dependencies": {
+    "@prisma/client": "^6.7.0",
+    "@solidjs/meta": "^0.29.4",
+    "@solidjs/router": "^0.15.0",
+    "@solidjs/start": "^1.1.0",
+    "@t3-oss/env-core": "^0.13.4",
+    "@tailwindcss/postcss": "^4.1.6",
+    "better-auth": "^1.2.7",
+    "postcss": "^8.5.3",
+    "prisma": "^6.7.0",
+    "solid-js": "^1.9.5",
+    "tailwindcss": "^4.1.6",
+    "tsx": "^4.19.4",
+    "vinxi": "^0.5.3",
+    "zod": "^3.24.4"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}
