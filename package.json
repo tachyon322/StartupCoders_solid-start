@@ -15,6 +15,9 @@
     "@t3-oss/env-core": "^0.13.4",
     "@tailwindcss/postcss": "^4.1.6",
     "better-auth": "^1.2.7",
+    "dotenv": "^16.5.0",
+    "drizzle-orm": "^0.43.1",
+    "pg": "^8.16.0",
     "postcss": "^8.5.3",
     "prisma": "^6.7.0",
     "solid-js": "^1.9.5",
@@ -25,5 +28,9 @@
   },
   "engines": {
     "node": ">=22"
+  },
+  "devDependencies": {
+    "@types/pg": "^8.15.1",
+    "drizzle-kit": "^0.31.1"
   }
 }
