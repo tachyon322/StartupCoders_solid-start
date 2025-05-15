@@ -8,6 +8,8 @@
     "version": "vinxi version"
   },
   "dependencies": {
+    "@fontsource/inter": "^5.2.5",
+    "@kobalte/core": "^0.13.9",
     "@prisma/client": "^6.7.0",
     "@solidjs/meta": "^0.29.4",
     "@solidjs/router": "^0.15.0",
@@ -15,13 +17,17 @@
     "@t3-oss/env-core": "^0.13.4",
     "@tailwindcss/postcss": "^4.1.6",
     "better-auth": "^1.2.7",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
     "dotenv": "^16.5.0",
     "drizzle-orm": "^0.43.1",
     "pg": "^8.16.0",
     "postcss": "^8.5.3",
     "prisma": "^6.7.0",
     "solid-js": "^1.9.5",
+    "tailwind-merge": "^3.3.0",
     "tailwindcss": "^4.1.6",
+    "tailwindcss-animate": "^1.0.7",
     "tsx": "^4.19.4",
     "vinxi": "^0.5.3",
     "zod": "^3.24.4"
