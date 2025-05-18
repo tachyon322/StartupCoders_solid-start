@@ -9,6 +9,8 @@ app.config.timestamp_*.js
 # dependencies
 /node_modules
 
+.env
+
 # IDEs and editors
 /.idea
 .project
