@@ -12,6 +12,6 @@ export default defineConfig({
   schema: './auth-schema.ts',
   dialect: 'postgresql',
   dbCredentials: {
-    url: "postgresql://solid_owner:npg_RhP68esAwWTC@ep-late-king-a2476826-pooler.eu-central-1.aws.neon.tech/solid?sslmode=require",
+    url: "postgresql://denis:123123@83.220.169.202:5432/solid_coders",
   },
 });

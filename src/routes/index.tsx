@@ -1,19 +1,28 @@
 import { Title } from "@solidjs/meta";
-import Counter from "~/components/Counter";
+import { useSession } from "~/lib/auth/session-context";
+import Header from "~/components/landing/Header";
+import HeroSection from "~/components/landing/HeroSection";
+import HowItWorks from "~/components/landing/HowItWorks";
+import Features from "~/components/landing/Features";
+import CTA from "~/components/landing/CTA";
+
+export const meta = () => {
+  return {
+    title: "Startup Coders",
+    description: "Welcome to my website!",
+  };
+};
 
 export default function Home() {
+  const sessionData = useSession();
   return (
-    <main>
-      <Title>Hello World</Title>
-      <h1 class="text-3xl font-bold">Hello world!</h1>
-      <Counter />
-      <p>
-        Visit{" "}
-        <a href="https://start.solidjs.com" target="_blank">
-          start.solidjs.com
-        </a>{" "}
-        to learn how to build SolidStart apps.
-      </p>
-    </main>
+    <>
+      <Title>Startup Coders</Title>
+      <Header session={sessionData} />
+      <HeroSection />
+      <HowItWorks />
+      <Features />
+      <CTA />
+    </>
   );
 }

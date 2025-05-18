@@ -1,72 +1,28 @@
 import { Title } from "@solidjs/meta";
-import { authClient } from "~/lib/auth-client";
-import { getRequestEvent } from "solid-js/web";
-import { createResource } from "solid-js";
+import { useSession } from "~/lib/auth/session-context";
 import Header from "~/components/landing/Header";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "~/components/ui/dropdown-menu";
-
-const handleSignIn = async () => {
-  const response = await authClient.signIn.social({ provider: "github" });
-  console.log(response);
-};
-
-const handleSignOut = async () => {
-  const response = await authClient.signOut();
-  console.log(response);
-};
 
 export default function About() {
-  const event = getRequestEvent();
-
-  const [sessionData] = createResource(async () => {
-    return await authClient.getSession({
-      fetchOptions: {
-        headers: event?.request.headers,
-      },
-    });
-  });
+  const sessionData = useSession();
 
   return (
-    <main>
-      <DropdownMenu >
-        <DropdownMenuTrigger>
-          <div class="w-10 h-10 ml-10 ">
-            <img src={sessionData()?.data?.user.image || ""} alt="user image" />
-          </div>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent class="bg-white border-0">
-          <DropdownMenuLabel>{sessionData()?.data?.user.name || "user"}</DropdownMenuLabel>
-          <DropdownMenuSeparator />
-          <DropdownMenuItem class="hover:bg-gray-300">Profile</DropdownMenuItem>
-          <DropdownMenuItem class="hover:bg-gray-300">Billing</DropdownMenuItem>
-          <DropdownMenuItem class="hover:bg-gray-300">Team</DropdownMenuItem>
-          <DropdownMenuItem class="hover:bg-gray-300">Subscription</DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
-      <Header session={sessionData()} />
-      <Title>About</Title>
-      <button
-        class="bg-blue-500 text-white p-2 rounded-md"
-        onClick={() => handleSignIn()}
-      >
-        Sign in with Github
-      </button>
-      <p>Session: {JSON.stringify(sessionData()?.data)}</p>
-      <p>Error: {JSON.stringify(sessionData()?.error)}</p>
-
-      <button
-        class="bg-blue-500 text-white p-2 rounded-md"
-        onClick={() => handleSignOut()}
-      >
-        Sign out
-      </button>
-    </main>
+    <>
+      <Header session={sessionData} />
+      <main class="container mx-auto px-4 py-8 max-w-6xl">
+        <Title>About</Title>
+        <h1 class="text-3xl font-bold mb-6">About Us</h1>
+        
+        <div class="bg-white p-6 rounded-lg shadow-md">
+          <h2 class="text-2xl font-semibold mb-4">Our Mission</h2>
+          <p class="mb-4">
+            We're dedicated to connecting developers and startups to create amazing products together.
+          </p>
+          <p class="mb-4">
+            Our platform helps talented developers find exciting projects and enables startups to
+            discover the perfect technical talent for their needs.
+          </p>
+        </div>
+      </main>
+    </>
   );
 }
