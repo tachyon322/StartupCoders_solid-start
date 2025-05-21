@@ -1,63 +1,53 @@
 import { Tag, TagInput } from "../ui/tag-input";
-import { createSignal, Show } from "solid-js";
+import { createSignal, Show, createResource } from "solid-js";
 import { Input } from "../ui/input";
 import { Label } from "../ui/label";
 import { Textarea } from "../ui/textarea";
 import { validateCreateStartup } from "~/validation";
 import { Button } from "../ui/button";
-import { UploadButton } from "~/lib/utils/uploadthing";
+import { ImageUpload } from "../ui/image-upload";
+import { getAllTags } from "~/data/user";
+import { createStartup as createStartupServer } from "~/data/startup";
 
-const mockData = {
-  tags: [
-    {
-      id: 1,
-      name: "Frontend",
-    },
-    {
-      id: 2,
-      name: "Backend",
-    },
-    {
-      id: 3,
-      name: "Mobile",
-    },
-    {
-      id: 4,
-      name: "Design",
-    },
-    {
-      id: 5,
-      name: "DevOps",
-    },
-    {
-      id: 6,
-      name: "Product",
-    },
-    {
-      id: 7,
-      name: "Marketing",
-    },
-  ]
+// Function to fetch all available tags from the server
+async function fetchTags() {
+  "use server";
+  const tags = await getAllTags();
+  return tags;
 }
 
-export default function StartupForm() {
+// Create a server action wrapper for the createStartup function
+async function createStartupAction(name: string, description: string, tags: Tag[], images: { id: string; url: string }[], userId: string) {
+  "use server";
+  try {
+    return await createStartupServer(name, description, tags, images, userId);
+  } catch (error) {
+    console.error("Error in server action:", error);
+    throw error;
+  }
+}
+
+export default function StartupForm(props: { session: any }) {
+  const { session } = props;
   const [name, setName] = createSignal("");
   const [description, setDescription] = createSignal("");
   const [selectedTags, setSelectedTags] = createSignal<Tag[]>([]);
+
+  // Create a resource to fetch tags data from the server
+  const [tags] = createResource(fetchTags);
   const [images, setImages] = createSignal<{ id: string; url: string }[]>([]);
   const [errors, setErrors] = createSignal<{ name?: string; description?: string; tags?: string }>({});
 
 
   // Handle form submission
-  function handleSubmit() {
-    console.log("Submit button clicked");
+  async function handleSubmit() {
 
     // Create form data object
     const formData = {
       name: name(),
       description: description(),
       tags: selectedTags(),
-      images: images() || []
+      images: images() || [],
     };
 
     // Validate the entire form using Zod
@@ -66,7 +56,14 @@ export default function StartupForm() {
     if (validationResult.success) {
       // Form is valid, proceed with submission
       console.log("Успех! форма обработана", validationResult.data);
-      alert("Form submitted! Check console for data.");
+      try {
+        await createStartupAction(formData.name, formData.description, formData.tags, formData.images, session?.());
+        console.log("Стартап успешно создан!");
+      }
+      catch (error) {
+        console.error("Ошибка при создании стартапа:", error);
+        setErrors({ name: "Ошибка при создании стартапа. Пожалуйста, попробуйте еще раз." });
+      }
     } else {
       // Form has errors, update the errors state
       // Ensure we're passing a valid object to setErrors
@@ -112,14 +109,23 @@ export default function StartupForm() {
 
         <div class="space-y-2">
           <Label for="tags">Теги</Label>
-          <TagInput
-            existingTags={mockData.tags}
-            selectedTags={selectedTags()}
-            onChange={setSelectedTags}
-            disabled={false}
-            class={errors().tags ? "border-red-500" : ""}
-            placeholder="Введите теги..."
-          />
+          <Show
+            when={!tags.error}
+            fallback={
+              <div class="text-red-500 text-sm mb-2">
+                Ошибка при загрузке тегов. Попробуйте перезагрузить страницу.
+              </div>
+            }
+          >
+            <TagInput
+              existingTags={tags() || []}
+              selectedTags={selectedTags()}
+              onChange={setSelectedTags}
+              disabled={tags.loading}
+              class={errors().tags ? "border-red-500" : ""}
+              placeholder={tags.loading ? "Загрузка тегов..." : "Введите теги..."}
+            />
+          </Show>
           <Show when={!errors().tags}>
             <p class="text-sm text-muted-foreground mt-1">
               Добавьте теги технологий которые вы используете, чтобы помочь другим пользователям найти вас
@@ -132,20 +138,22 @@ export default function StartupForm() {
 
         <div class="space-y-2">
           <Label for="images">Изображения</Label>
-          <UploadButton endpoint="imageUploader" />
+          <ImageUpload value={images()} onChange={setImages} />
           <p class="text-sm text-muted-foreground mt-1">
             Добавьте изображения, чтобы показать макеты или идеи (необязательно)
           </p>
         </div>
 
-        {/* Regular HTML button for testing */}
-        <Button
-          type="button"
-          variant={"secondary"}
-          onClick={handleSubmit}
-        >
-          Создать
-        </Button>
+        <div class="space-y-2 gap-2 flex flex-row justify-end">
+          <Button
+            type="button"
+            variant={"secondary"}
+            onClick={handleSubmit}
+          >
+            Создать
+          </Button>
+          <Button>Отмена</Button>
+        </div>
       </div>
     </div>
   );

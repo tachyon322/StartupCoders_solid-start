@@ -1,7 +1,6 @@
 import { createSignal, mergeProps, Show } from "solid-js";
 import UserDropdown from "../ui/UserDropdown";
 import { A } from "@solidjs/router";
-import { Button } from "../ui/button";
 
 type HeaderProps = {
   session: any;

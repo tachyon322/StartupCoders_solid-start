@@ -3,6 +3,7 @@ import db from "../lib/db";
 import * as schema from "../../auth-schema";
 import { eq, and, inArray, like, sql, desc, count } from "drizzle-orm";
 import { authClient } from "../lib/auth/auth-client";
+import { useSession } from "~/lib/auth/session-context";
 
 // Type definition for the Tag input
 export interface Tag {
@@ -213,13 +214,15 @@ export async function createStartup(
   name: string,
   description: string,
   tags: Tag[],
-  uploadedImages: { id: string, url: string }[] = []
+  uploadedImages: { id: string, url: string }[] = [],
+  session: any
 ) {
-  const session = await getSession();
   
-  if (!session?.user?.id) {
+  if (!session?.data?.user?.id) {
     throw new Error("Unauthorized");
   }
+
+  const userId = session.data.user.id;
 
   // Optimize tag handling - split into existing and new tags
   const existingTags = tags.filter(t => t.id).map(t => ({ id: t.id as number }));
@@ -271,7 +274,7 @@ export async function createStartup(
   const [newStartup] = await db.insert(schema.startup).values({
     name,
     description,
-    creatorUser: session.user.id,
+    creatorUser: userId,
     updatedAt: new Date(),
   }).returning();
   
@@ -289,7 +292,7 @@ export async function createStartup(
   
   // Connect creator as a participant
   await db.insert(schema.userToStartup).values({
-    userId: session.user.id,
+    userId: userId,
     startupId: newStartup.id
   });
   

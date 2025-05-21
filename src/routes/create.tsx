@@ -2,10 +2,17 @@ import { useNavigate } from '@solidjs/router'
 import Header from '~/components/landing/Header';
 import { useSession } from '~/lib/auth/session-context';
 import StartupForm from '~/components/create/StartupForm';
+import { createEffect } from 'solid-js';
 
 const Page = () => {
     const session = useSession();
     const navigate = useNavigate();
+
+    createEffect(() => {
+        if (!session()?.data?.user) {
+            navigate("/", { replace: true });
+        }
+    });
 
     return (
         <div class="min-h-screen bg-gray-50">
@@ -22,7 +29,7 @@ const Page = () => {
                 </div>
 
                 <div class="bg-white shadow-sm rounded-lg p-6 md:p-8 border border-gray-100">
-                    <StartupForm  />
+                    <StartupForm session={session} />
                 </div>
 
                 <div class="mt-8 text-center text-sm text-gray-500">

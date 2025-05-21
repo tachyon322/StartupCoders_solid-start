@@ -6,6 +6,9 @@ import { uploadRouter } from "~/data/uploadthing";
 
 const handler = createRouteHandler({
     router: uploadRouter,
+    config: {
+        token: import.meta.env.VITE_UPLOADTHING_TOKEN,
+    }
 });
 
 export const GET = (event: APIEvent) => handler(event.request);
