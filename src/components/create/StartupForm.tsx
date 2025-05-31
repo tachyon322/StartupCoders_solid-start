@@ -6,6 +6,7 @@ import { Textarea } from "../ui/textarea";
 import { validateCreateStartup } from "~/validation";
 import { Button } from "../ui/button";
 import { ImageUpload } from "../ui/image-upload";
+import { Toast } from "../ui/toast";
 import { getAllTags } from "~/data/user";
 import { createStartup as createStartupServer } from "~/data/startup";
 
@@ -32,15 +33,29 @@ export default function StartupForm(props: { session: any }) {
   const [name, setName] = createSignal("");
   const [description, setDescription] = createSignal("");
   const [selectedTags, setSelectedTags] = createSignal<Tag[]>([]);
+  const [isActive, setIsActive] = createSignal(false);
 
   // Create a resource to fetch tags data from the server
   const [tags] = createResource(fetchTags);
   const [images, setImages] = createSignal<{ id: string; url: string }[]>([]);
   const [errors, setErrors] = createSignal<{ name?: string; description?: string; tags?: string }>({});
 
+  // Toast state management
+  const [toastVisible, setToastVisible] = createSignal(false);
+  const [toastMessage, setToastMessage] = createSignal("");
+  const [toastVariant, setToastVariant] = createSignal<"success" | "error" | "warning" | "info">("info");
+
+  // Helper function to show toast
+  const showToast = (message: string, variant: "success" | "error" | "warning" | "info" = "info") => {
+    setToastMessage(message);
+    setToastVariant(variant);
+    setToastVisible(true);
+  };
+
 
   // Handle form submission
   async function handleSubmit() {
+    setIsActive(true);
 
     // Create form data object
     const formData = {
@@ -57,21 +72,34 @@ export default function StartupForm(props: { session: any }) {
       // Form is valid, proceed with submission
       console.log("Успех! форма обработана", validationResult.data);
       try {
-        await createStartupAction(formData.name, formData.description, formData.tags, formData.images, session?.());
+        await createStartupAction(formData.name, formData.description, formData.tags, formData.images, session?.())
+          .then(() => {
+            setName("");
+            setDescription("");
+            setSelectedTags([]);
+            setImages([]);
+            setErrors({});
+            setIsActive(false);
+            showToast("Стартап успешно создан!", "success");
+        })
         console.log("Стартап успешно создан!");
       }
       catch (error) {
         console.error("Ошибка при создании стартапа:", error);
+        setIsActive(false);
+        showToast("Ошибка при создании стартапа. Пожалуйста, попробуйте еще раз.", "error");
         setErrors({ name: "Ошибка при создании стартапа. Пожалуйста, попробуйте еще раз." });
       }
     } else {
       // Form has errors, update the errors state
+      setIsActive(false);
       // Ensure we're passing a valid object to setErrors
       setErrors({
         name: validationResult.errors?.name,
         description: validationResult.errors?.description,
         tags: validationResult.errors?.tags
       });
+      showToast("Пожалуйста, исправьте ошибки в форме", "error");
       console.log("Ошибка валидации формы!", validationResult.errors);
     }
   }
@@ -149,12 +177,23 @@ export default function StartupForm(props: { session: any }) {
             type="button"
             variant={"secondary"}
             onClick={handleSubmit}
+            disabled={isActive()}
           >
-            Создать
+            {isActive() ? "Создание..." : "Создать"}
           </Button>
           <Button>Отмена</Button>
         </div>
       </div>
+
+      {/* Toast notification */}
+      <Toast
+        visible={toastVisible()}
+        onClose={() => setToastVisible(false)}
+        variant={toastVariant()}
+        duration={5000}
+      >
+        {toastMessage()}
+      </Toast>
     </div>
   );
 }

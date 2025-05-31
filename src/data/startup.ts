@@ -1,9 +1,9 @@
+"use server";
 import { createSignal, createResource } from "solid-js";
 import db from "../lib/db";
 import * as schema from "../../auth-schema";
 import { eq, and, inArray, like, sql, desc, count } from "drizzle-orm";
 import { authClient } from "../lib/auth/auth-client";
-import { useSession } from "~/lib/auth/session-context";
 
 // Type definition for the Tag input
 export interface Tag {
@@ -97,7 +97,7 @@ export async function getStartups(
 
   // Apply search filter if provided
   if (searchQuery) {
-    query.where(like(schema.startup.name, `%${searchQuery}%`));
+    query.where(sql`LOWER(${schema.startup.name}) LIKE LOWER(${`%${searchQuery}%`})`);
   }
 
   // Execute the query with pagination and ordering
@@ -189,7 +189,7 @@ export async function getStartups(
   const countQuery = db.select({ value: count() }).from(schema.startup);
   
   if (searchQuery) {
-    countQuery.where(like(schema.startup.name, `%${searchQuery}%`));
+    countQuery.where(sql`LOWER(${schema.startup.name}) LIKE LOWER(${`%${searchQuery}%`})`);
   }
   
   const totalResults = await countQuery;

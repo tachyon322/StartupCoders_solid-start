@@ -1,31 +1,55 @@
 import Header from "~/components/landing/Header";
 import { useSession } from "~/lib/auth/session-context";
 import { getStartups } from "~/data/startup";
+import { getAllTags } from "~/data/user";
+import { useSearchParams } from "@solidjs/router";
 import { createResource } from "solid-js";
+import StartupList from "~/components/find/StartupList";
+import StartupSearch from "~/components/find/StartupSearch";
 
 const PAGE_SIZE = 10;
 
-async function getAllStartups(pageStr: string, queryStr: string | undefined, tagsStr: string | undefined) {
-  const page = parseInt(pageStr, 10) || 1;
-    // Parse tag IDs if any
-  const tagIds = tagsStr
-    ? tagsStr.split(",").map((id) => parseInt(id, 10))
-    : undefined;
-
-  return getStartups(
-    page,
-    PAGE_SIZE,
-    queryStr,
-    tagIds
-  );
-}
-
-
 export default function find() {
-    const sessionData = useSession();
+  const [searchParams] = useSearchParams();
+  const sessionData = useSession();
+
+  const [tagsResource] = createResource(async () => {
+    return getAllTags();
+  });
+
+  const [startupsResource] = createResource(
+    () => {
+      const pageParam = searchParams.page;
+      const queryParam = searchParams.q;
+      const tagsParam = searchParams.tags;
+
+      const pageStr = Array.isArray(pageParam) ? pageParam[0] : pageParam;
+      const queryStr = Array.isArray(queryParam) ? queryParam[0] : queryParam;
+      const tagsStr = Array.isArray(tagsParam) ? tagsParam[0] : tagsParam; // Assuming tags are a single comma-separated string if multiple are passed via URL
+
+      const page = parseInt(pageStr || "1", 10) || 1;
+      const tagIds = tagsStr
+        ? tagsStr.split(",").map((id: string) => parseInt(id.trim(), 10)).filter((id: number) => !isNaN(id))
+        : undefined;
+
+      return { page, pageSize: PAGE_SIZE, searchQuery: queryStr || undefined, tagIds };
+    },
+    async (params) => {
+      return getStartups(params.page, params.pageSize, params.searchQuery, params.tagIds);
+    }
+  );
+
   return (
     <div>
-        <Header session={sessionData} />
+      <Header session={sessionData} />
+
+      <div class="container mx-auto px-4 max-w-6xl">
+        <h1 class="text-2xl font-bold mb-4 my-4">Найдите стартапы</h1>
+        <StartupSearch availableTags={tagsResource() || []} />
+        <div class="mt-6">
+          <StartupList startupsResource={startupsResource} />
+        </div>
+      </div>
     </div>
   )
 }
