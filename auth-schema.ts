@@ -137,7 +137,7 @@ export const startup = pgTable("startup", {
   creatorUser: text("creator_user").notNull().references(() => user.id, { onDelete: "cascade" }),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull(),
-  startupRequestId: integer("startup_request_id").references(() => startupRequest.id),
+  startupRequestId: integer("startup_request_id").references(() => startupRequest.id, { onDelete: "set null" }),
 });
 
 export const startupRelations = relations(startup, ({ one, many }) => ({

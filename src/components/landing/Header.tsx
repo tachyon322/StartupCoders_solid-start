@@ -20,7 +20,7 @@ export default function Header(props: HeaderProps) {
     <>
       <header class="bg-indigo-950 text-white">
         <div class="container mx-auto px-4 max-w-6xl">
-          <div class="flex items-center justify-between py-4">
+          <div class="flex items-center justify-between py-4 relative">
             <div class="flex items-center">
               <a
                 href={merged.data ? "/find" : "/"}
@@ -32,8 +32,8 @@ export default function Header(props: HeaderProps) {
               </a>
             </div>
 
-            {/* Desktop Navigation */}
-            <nav class="hidden md:flex items-center space-x-10">
+            {/* Desktop Navigation - Centered */}
+            <nav class="hidden md:flex items-center space-x-10 absolute left-1/2 transform -translate-x-1/2">
               <a
                 href="/find"
                 class="hover:text-indigo-300 transition-colors"

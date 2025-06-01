@@ -399,12 +399,15 @@ export async function getStartupById(startupId: string) {
   };
 }
 
-export async function requestToParticipate(startupId: string, message: string) {
-  const session = await getSession();
+export async function requestToParticipate(startupId: string, message: string, session: any) {
+  // Extract user data from session similar to getSession function
+  const userData = session?.data?.user || session?.user || session?.data || {};
   
-  if (!session?.user?.id) {
+  if (!userData?.id) {
     throw new Error("Unauthorized");
   }
+
+  const userId = userData.id;
 
   // Check if startup exists
   const startupExists = await db
@@ -424,7 +427,7 @@ export async function requestToParticipate(startupId: string, message: string) {
     .where(
       and(
         eq(schema.userToStartup.startupId, startupId),
-        eq(schema.userToStartup.userId, session.user.id)
+        eq(schema.userToStartup.userId, userId)
       )
     )
     .limit(1);
@@ -450,7 +453,7 @@ export async function requestToParticipate(startupId: string, message: string) {
     .where(
       and(
         eq(schema.startupToStartupRequest.startupId, startupId),
-        eq(schema.userToStartupRequest.userId, session.user.id)
+        eq(schema.userToStartupRequest.userId, userId)
       )
     );
 
@@ -469,7 +472,7 @@ export async function requestToParticipate(startupId: string, message: string) {
   // Connect request to user and startup
   await Promise.all([
     db.insert(schema.userToStartupRequest).values({
-      userId: session.user.id,
+      userId: userId,
       startupRequestId: newRequest.id,
     }),
     db.insert(schema.startupToStartupRequest).values({
@@ -486,33 +489,41 @@ export async function requestToParticipate(startupId: string, message: string) {
 }
 
 // Check if user has requested access
-export async function hasRequestedAccess(startupId: string) {
-  const session = await getSession();
+export async function hasRequestedAccess(session: any, startupId: string) {
+  // Extract user data from session similar to getSession function
+  const userData = session?.data?.user || session?.user || session?.data || {};
   
-  if (!session?.user?.id) {
+  if (!userData?.id || !startupId) {
     return false;
   }
 
-  const existingRequest = await db
-    .select({ id: schema.startupRequest.id })
-    .from(schema.startupRequest)
-    .innerJoin(
-      schema.userToStartupRequest,
-      eq(schema.userToStartupRequest.startupRequestId, schema.startupRequest.id)
-    )
-    .innerJoin(
-      schema.startupToStartupRequest,
-      eq(schema.startupToStartupRequest.startupRequestId, schema.startupRequest.id)
-    )
-    .where(
-      and(
-        eq(schema.startupToStartupRequest.startupId, startupId),
-        eq(schema.userToStartupRequest.userId, session.user.id)
+  try {
+    // Check if user has a pending request for this startup
+    const existingRequests = await db
+      .select({
+        requestId: schema.startupRequest.id
+      })
+      .from(schema.startupRequest)
+      .innerJoin(
+        schema.userToStartupRequest,
+        eq(schema.userToStartupRequest.startupRequestId, schema.startupRequest.id)
       )
-    )
-    .limit(1);
+      .innerJoin(
+        schema.startupToStartupRequest,
+        eq(schema.startupToStartupRequest.startupRequestId, schema.startupRequest.id)
+      )
+      .where(
+        and(
+          eq(schema.startupToStartupRequest.startupId, startupId),
+          eq(schema.userToStartupRequest.userId, userData.id)
+        )
+      );
 
-  return existingRequest.length > 0;
+    return existingRequests.length > 0;
+  } catch (error) {
+    console.error("Error checking requested access:", error);
+    return false;
+  }
 }
 
 // Get user requests
@@ -857,4 +868,28 @@ export async function rejectRequest(requestId: string) {
     .where(eq(schema.startup.id, foundStartup.id));
 
   return true;
+}
+
+// Client-side wrapper for requestToParticipate
+export async function requestToParticipateClient(startupId: string, message: string) {
+  "use client";
+  
+  try {
+    const response = await fetch('/api/startup/request', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ startupId, message }),
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.message || 'Failed to send request');
+    }
+
+    return await response.json();
+  } catch (error) {
+    throw error;
+  }
 }

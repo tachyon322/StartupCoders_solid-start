@@ -9,7 +9,8 @@ import {
   startup,
   userToStartup,
   startupToTag,
-  images
+  images,
+  userToStartupRequest
 } from "../../auth-schema";
 
 // Define Tag interface to match the original import
@@ -160,6 +161,14 @@ export async function getUser(identifier: string) {
     participatingParticipantsByStartup[p.startupId].push(p.user);
   });
 
+  // Get user's startup requests
+  const userStartupRequests = await db.query.userToStartupRequest.findMany({
+    where: eq(userToStartupRequest.userId, userId),
+    with: {
+      startupRequest: true
+    }
+  });
+
   // Transform the data to match the expected structure
   const transformedUser = {
     ...userData,
@@ -173,7 +182,8 @@ export async function getUser(identifier: string) {
       ...startup,
       tags: startup.tags.map(t => t.tag),
       participants: participatingParticipantsByStartup[startup.id] || []
-    }))
+    })),
+    receivedStartupRequests: userStartupRequests
   };
 
   return transformedUser;

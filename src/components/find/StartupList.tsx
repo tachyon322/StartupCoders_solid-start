@@ -1,5 +1,6 @@
 import { Match, Show, Switch } from "solid-js";
 import StartupCard from "./StartupCard";
+import StartupSkeleton from "./StartupSkeleton";
 
 interface StartupListProps {
   startupsResource: any; // Resource returned from createResource
@@ -9,7 +10,7 @@ export default function StartupList(props: StartupListProps) {
   return (
     <Show
       when={props.startupsResource.state === "ready"}
-      fallback={<p>Загрузка...</p>}
+      fallback={<StartupSkeleton />}
     >
       <Switch>
         <Match when={Array.isArray(props.startupsResource()?.startups) && props.startupsResource()!.startups.length > 0}>

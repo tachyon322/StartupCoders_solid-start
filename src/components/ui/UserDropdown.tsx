@@ -14,7 +14,10 @@ interface UserDropdownProps {
 }
 
 const handleSignOut = async () => {
-  const response = await authClient.signOut();
+  const response = await authClient.signOut().
+  then(() => {
+    window.location.href = "/login";
+  });
   console.log(response);
 };
 
@@ -35,14 +38,14 @@ export default function UserDropdown(props: UserDropdownProps) {
         <DropdownMenuLabel>{props.session?.user?.name || "User"}</DropdownMenuLabel>
         <DropdownMenuSeparator />
         <DropdownMenuItem class="hover:bg-gray-100 cursor-pointer">
-          <A href={`/profile/${props.session.user.username || props.session.user.id}`} class="w-full block">Profile</A>
+          <A href={`/profile/${props.session.user.username || props.session.user.id}`} class="w-full block">Профиль</A>
         </DropdownMenuItem>
         <DropdownMenuItem class="hover:bg-gray-100 cursor-pointer">
-          <a href="/settings" class="w-full block">Settings</a>
+          <a href="/settings" class="w-full block">Настройки</a>
         </DropdownMenuItem>
         <DropdownMenuSeparator />
-        <DropdownMenuItem class="hover:bg-gray-100 cursor-pointer" onClick={handleSignOut}>
-          Sign Out
+        <DropdownMenuItem class="hover:bg-gray-100 cursor-pointer text-red-500" onClick={handleSignOut}>
+          Выйти
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
