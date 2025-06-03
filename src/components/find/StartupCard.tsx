@@ -1,4 +1,4 @@
-import { JSX, createMemo } from "solid-js";
+import { JSX, createMemo, createSignal } from "solid-js";
 import { A } from "@solidjs/router";
 import { formatDistanceToNow } from "date-fns";
 import { ru } from "date-fns/locale";
@@ -20,6 +20,8 @@ interface StartupCardProps {
 }
 
 export default function StartupCard(props: StartupCardProps): JSX.Element {
+  const [creatorImageError, setCreatorImageError] = createSignal(false);
+  
   // Create truncated description
   const truncatedDescription = createMemo(() => {
     return props.description.length > 120
@@ -111,7 +113,7 @@ export default function StartupCard(props: StartupCardProps): JSX.Element {
           {props.tags && props.tags.length > 0 && (
             <div class="mt-3 flex flex-wrap gap-1">
               {props.tags.slice(0, 3).map(tag => (
-                <span 
+                <span
                   class="px-2 py-0.5 bg-indigo-50 text-indigo-700 text-xs rounded-full"
                 >
                   {tag.name}
@@ -130,11 +132,12 @@ export default function StartupCard(props: StartupCardProps): JSX.Element {
               {props.creatorId && (
                 <div class="flex items-center space-x-2">
                   <div class="w-6 h-6 rounded-full bg-indigo-100 overflow-hidden">
-                    {props.creatorId.image ? (
+                    {props.creatorId.image && !creatorImageError() ? (
                       <img
                         src={props.creatorId.image}
                         alt={props.creatorId.name || 'Creator'}
                         class="w-full h-full object-cover"
+                        onError={() => setCreatorImageError(true)}
                       />
                     ) : (
                       <div class="flex items-center justify-center w-full h-full text-indigo-500 text-xs font-bold">

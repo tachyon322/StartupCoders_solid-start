@@ -5,7 +5,8 @@
     "dev": "vinxi dev",
     "build": "vinxi build",
     "start": "vinxi start",
-    "version": "vinxi version"
+    "version": "vinxi version",
+    "studio": "drizzle-kit studio"
   },
   "dependencies": {
     "@fontsource/inter": "^5.2.5",
@@ -19,6 +20,7 @@
     "better-auth": "^1.2.7",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
+    "date-fns": "^4.1.0",
     "dotenv": "^16.5.0",
     "drizzle-orm": "^0.43.1",
     "pg": "^8.16.0",

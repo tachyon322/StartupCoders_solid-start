@@ -10,7 +10,7 @@ import { globalCache, createCacheKey, invalidateCache } from "~/lib/cache";
 import StartupLoadingSkeleton, { StartupErrorFallback } from "~/components/startup/SkeletonFallback";
 
 // Cache configuration
-const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
+const CACHE_DURATION = 2 * 60 * 1000; // 2 minutes
 
 // Cached startup data fetcher with stale-while-revalidate
 async function getCachedStartupData(startupId: string) {
@@ -59,7 +59,7 @@ export default function index() {
   );
 
   // Optimized resource for access check with caching
-  const [requestedAccess, { refetch: refetchRequestedAccess }] = createResource(
+  const [requestedAccess] = createResource(
     () => session() && params.id ? [session(), String(params.id), cacheInvalidationTrigger()] as [any, string, number] : null,
     ([sessionData, startupId, _trigger]: [any, string, number]) => getCachedAccessData(sessionData, startupId),
     {

@@ -27,6 +27,7 @@ export default function EditableProfileHeader(props: EditableProfileHeaderProps)
   const [editDescription, setEditDescription] = createSignal(props.user.description || "");
   const [editTags, setEditTags] = createSignal<Tag[]>(props.user.tags || []);
   const [isSaving, setIsSaving] = createSignal(false);
+  const [imageError, setImageError] = createSignal(false);
 
   // Create a resource to fetch tags data from the server
   const [allTags] = createResource(fetchTags);
@@ -88,18 +89,19 @@ export default function EditableProfileHeader(props: EditableProfileHeaderProps)
         <div class="flex flex-col sm:flex-row items-start gap-6">
           {/* Profile Image */}
           <div class="flex-shrink-0">
-            <Show 
-              when={props.user.image} 
+            <Show
+              when={props.user.image && !imageError()}
               fallback={
                 <div class="w-20 h-20 sm:w-24 sm:h-24 bg-gradient-to-br from-blue-400 to-purple-500 rounded-full flex items-center justify-center text-white text-xl sm:text-2xl font-bold">
                   {props.user.name?.charAt(0)?.toUpperCase() || props.user.username?.charAt(0)?.toUpperCase() || 'U'}
                 </div>
               }
             >
-              <img 
-                src={props.user.image!} 
-                alt="Profile" 
+              <img
+                src={props.user.image!}
+                alt="Profile"
                 class="w-20 h-20 sm:w-24 sm:h-24 rounded-full object-cover border-3 border-white shadow-lg"
+                onError={() => setImageError(true)}
               />
             </Show>
           </div>

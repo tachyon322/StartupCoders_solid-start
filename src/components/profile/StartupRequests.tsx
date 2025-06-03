@@ -6,6 +6,7 @@ interface StartupRequest {
   startupRequest: {
     id: number;
     message: string;
+    status: "pending" | "approved" | "rejected";
     createdAt: Date;
     updatedAt: Date;
   };
@@ -24,6 +25,17 @@ export default function StartupRequests(props: StartupRequestsProps) {
       hour: '2-digit',
       minute: '2-digit'
     });
+  };
+
+  const getStatusBadge = (status: "pending" | "approved" | "rejected") => {
+    switch (status) {
+      case "pending":
+        return { text: "В ожидании", variant: "outline" as const, class: "text-yellow-600 border-yellow-300" };
+      case "approved":
+        return { text: "Одобрено", variant: "default" as const, class: "bg-green-500 text-white" };
+      case "rejected":
+        return { text: "Отклонено", variant: "destructive" as const, class: "bg-red-500 text-white" };
+    }
   };
 
   const getTimeAgo = (date: Date) => {
@@ -75,6 +87,12 @@ export default function StartupRequests(props: StartupRequestsProps) {
                     <div class="flex items-center gap-2">
                       <Badge variant="outline" class="text-xs">
                         Заявка #{request.startupRequest.id}
+                      </Badge>
+                      <Badge
+                        variant={getStatusBadge(request.startupRequest.status).variant}
+                        class={`text-xs ${getStatusBadge(request.startupRequest.status).class}`}
+                      >
+                        {getStatusBadge(request.startupRequest.status).text}
                       </Badge>
                     </div>
                   </div>

@@ -58,6 +58,7 @@ export default function StartupRightCard(props: StartupRightCardProps) {
     const [message, setMessage] = createSignal("");
     const [isSubmitting, setIsSubmitting] = createSignal(false);
     const [error, setError] = createSignal<string | null>(null);
+    const [creatorImageError, setCreatorImageError] = createSignal(false);
 
     const isRequestedAccess = props.isRequestedAccess || false;
     const width = props.width;
@@ -125,10 +126,10 @@ export default function StartupRightCard(props: StartupRightCardProps) {
                         <h4 class="font-semibold mb-2">Создатель</h4>
                         <Show when={props.startup!.creatorId} fallback={<p class="text-gray-500">Информация о создателе недоступна</p>}>
                             <A class="flex items-center gap-2" href={`/profile/${props.startup!.creatorId!.username || props.startup!.creatorId!.id}`}>
-                                <Show when={props.startup!.creatorId!.image} fallback={
+                                <Show when={props.startup!.creatorId!.image && !creatorImageError()} fallback={
                                     <div class="w-6 h-6 bg-gray-300 rounded-full flex items-center justify-center">
                                         <span class="text-xs text-gray-600 font-semibold">
-                                            {props.startup!.creatorId!.name?.[0] || props.startup!.creatorId!.username?.[0] || '?'}
+                                            {props.startup!.creatorId!.name?.[0]?.toUpperCase() || props.startup!.creatorId!.username?.[0]?.toUpperCase() || '?'}
                                         </span>
                                     </div>
                                 }>
@@ -136,6 +137,7 @@ export default function StartupRightCard(props: StartupRightCardProps) {
                                         src={props.startup!.creatorId!.image!}
                                         alt="Creator"
                                         class="w-6 h-6 rounded-full object-cover"
+                                        onError={() => setCreatorImageError(true)}
                                     />
                                 </Show>
                                 <div>
@@ -153,24 +155,29 @@ export default function StartupRightCard(props: StartupRightCardProps) {
                             <h4 class="font-semibold mb-2">Участники ({props.startup!.participants.length})</h4>
                             <div class="space-y-2 max-h-32 overflow-y-auto">
                                 <For each={props.startup!.participants}>
-                                    {(participant) => (
-                                        <A class="flex items-center space-x-2" href={`/profile/${participant.username || participant.id}`}>
-                                            <Show when={participant.image} fallback={
-                                                <div class="w-6 h-6 bg-gray-300 rounded-full flex items-center justify-center">
-                                                    <span class="text-xs text-gray-600 font-semibold">
-                                                        {participant.name?.[0] || participant.username?.[0] || '?'}
-                                                    </span>
-                                                </div>
-                                            }>
-                                                <img
-                                                    src={participant.image!}
-                                                    alt="Team member"
-                                                    class="w-6 h-6 rounded-full object-cover"
-                                                />
-                                            </Show>
-                                            <span class="text-sm">{participant.name || participant.username}</span>
-                                        </A>
-                                    )}
+                                    {(participant) => {
+                                        const [imageError, setImageError] = createSignal(false);
+                                        
+                                        return (
+                                            <A class="flex items-center space-x-2" href={`/profile/${participant.username || participant.id}`}>
+                                                <Show when={participant.image && !imageError()} fallback={
+                                                    <div class="w-6 h-6 bg-gray-300 rounded-full flex items-center justify-center">
+                                                        <span class="text-xs text-gray-600 font-semibold">
+                                                            {participant.name?.[0]?.toUpperCase() || participant.username?.[0]?.toUpperCase() || '?'}
+                                                        </span>
+                                                    </div>
+                                                }>
+                                                    <img
+                                                        src={participant.image!}
+                                                        alt="Team member"
+                                                        class="w-6 h-6 rounded-full object-cover"
+                                                        onError={() => setImageError(true)}
+                                                    />
+                                                </Show>
+                                                <span class="text-sm">{participant.name || participant.username}</span>
+                                            </A>
+                                        );
+                                    }}
                                 </For>
                             </div>
                         </div>

@@ -133,8 +133,9 @@ export const createCacheKey = {
   startup: (id: string) => `startup:${id}`,
   userAccess: (startupId: string, userId: string) => `access:${startupId}:${userId}`,
   userProfile: (userId: string) => `profile:${userId}`,
-  startupList: (page: number, search?: string, tags?: string) => 
-    `startups:${page}:${search || 'all'}:${tags || 'none'}`
+  startupList: (page: number, search?: string, tags?: string) =>
+    `startups:${page}:${search || 'all'}:${tags || 'none'}`,
+  tags: () => 'tags:all'
 };
 
 // Cache invalidation helpers
@@ -148,17 +149,23 @@ export const invalidateCache = {
   userProfile: (userId: string) => {
     globalCache.delete(createCacheKey.userProfile(userId));
   },
-  startupRelated: (startupId: string, userId?: string) => {
-    globalCache.delete(createCacheKey.startup(startupId));
-    if (userId) {
-      globalCache.delete(createCacheKey.userAccess(startupId, userId));
-    }
-    // Also invalidate startup lists as they might be affected
+  tags: () => {
+    globalCache.delete(createCacheKey.tags());
+  },
+  startupLists: () => {
     const keys = Array.from((globalCache as any).cache.keys()) as string[];
     keys.forEach(key => {
       if (key.startsWith('startups:')) {
         globalCache.delete(key);
       }
     });
+  },
+  startupRelated: (startupId: string, userId?: string) => {
+    globalCache.delete(createCacheKey.startup(startupId));
+    if (userId) {
+      globalCache.delete(createCacheKey.userAccess(startupId, userId));
+    }
+    // Also invalidate startup lists as they might be affected
+    invalidateCache.startupLists();
   }
 };

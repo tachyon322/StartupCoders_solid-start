@@ -101,7 +101,7 @@ export default function Header(props: HeaderProps) {
                 }
               >
                 <div class="flex items-center">
-                  <UserDropdown session={merged.session} />
+                  <UserDropdown session={merged.data} />
                 </div>
               </Show>
               <button

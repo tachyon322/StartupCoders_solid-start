@@ -7,6 +7,7 @@ import {
   primaryKey,
   uuid as pgUuid,
   serial,
+  pgEnum,
 } from "drizzle-orm/pg-core";
 import { relations, sql } from "drizzle-orm";
 
@@ -97,9 +98,12 @@ export const userToTagRelations = relations(userToTag, ({ one }) => ({
   }),
 }));
 
+export const statusEnum = pgEnum("status", ["pending", "approved", "rejected"]);
+
 export const startupRequest = pgTable("startup_request", {
   id: serial("id").primaryKey(),
   message: text("message").notNull(),
+  status: statusEnum("status").notNull().default("pending"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull(),
 });

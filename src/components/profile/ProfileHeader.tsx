@@ -1,4 +1,4 @@
-import { Show } from "solid-js";
+import { Show, createSignal } from "solid-js";
 import { Card, CardContent } from "~/components/ui/card";
 import { Badge } from "~/components/ui/badge";
 
@@ -7,6 +7,8 @@ interface ProfileHeaderProps {
 }
 
 export default function ProfileHeader(props: ProfileHeaderProps) {
+  const [imageError, setImageError] = createSignal(false);
+  
   const formatDate = (date: Date) => {
     return new Date(date).toLocaleDateString('ru-RU', {
       year: 'numeric',
@@ -21,18 +23,19 @@ export default function ProfileHeader(props: ProfileHeaderProps) {
         <div class="flex flex-col md:flex-row items-start md:items-center gap-6">
           {/* Profile Image */}
           <div class="flex-shrink-0">
-            <Show 
-              when={props.user.image} 
+            <Show
+              when={props.user.image && !imageError()}
               fallback={
                 <div class="w-24 h-24 md:w-32 md:h-32 bg-gradient-to-br from-blue-400 to-purple-500 rounded-full flex items-center justify-center text-white text-2xl md:text-3xl font-bold">
                   {props.user.name?.charAt(0)?.toUpperCase() || props.user.username?.charAt(0)?.toUpperCase() || 'U'}
                 </div>
               }
             >
-              <img 
-                src={props.user.image!} 
-                alt="Profile" 
+              <img
+                src={props.user.image!}
+                alt="Profile"
                 class="w-24 h-24 md:w-32 md:h-32 rounded-full object-cover border-4 border-white shadow-lg"
+                onError={() => setImageError(true)}
               />
             </Show>
           </div>
