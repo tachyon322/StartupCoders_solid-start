@@ -10,6 +10,7 @@ app.config.timestamp_*.js
 /node_modules
 
 .env
+.env.example
 
 # IDEs and editors
 /.idea
