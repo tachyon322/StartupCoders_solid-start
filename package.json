@@ -17,6 +17,7 @@
     "@solidjs/start": "^1.1.0",
     "@t3-oss/env-core": "^0.13.4",
     "@tailwindcss/postcss": "^4.1.6",
+    "@uploadthing/solid": "^7.3.1",
     "better-auth": "^1.2.7",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
@@ -31,6 +32,7 @@
     "tailwindcss": "^4.1.6",
     "tailwindcss-animate": "^1.0.7",
     "tsx": "^4.19.4",
+    "uploadthing": "^7.7.2",
     "vinxi": "^0.5.3",
     "zod": "^3.24.4"
   },
