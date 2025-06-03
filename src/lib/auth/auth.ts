@@ -18,5 +18,15 @@ export const auth = betterAuth({
             clientId: import.meta.env.VITE_GOOGLE_CLIENT_ID || null,
             clientSecret: import.meta.env.VITE_GOOGLE_CLIENT_SECRET || null,
         }
-    }
+    },
+    advanced: {
+        crossSubDomainCookies: {
+            enabled: true,
+        },
+        generateId: false,
+    },
+    trustedOrigins: [
+        "http://localhost:3000",
+        "https://solid-test-mu.vercel.app"
+    ]
 });
