@@ -16,7 +16,11 @@ const CACHE_DURATION = 2 * 60 * 1000; // 2 minutes
 async function getCachedStartupData(startupId: string) {
   return globalCache.get(
     createCacheKey.startup(startupId),
-    () => getStartupById(startupId)
+    () => getStartupById(startupId),
+    {
+      maxAge: CACHE_DURATION, // 2 minutes fresh
+      staleWhileRevalidate: 10 * 60 * 1000 // 10 minutes total
+    }
   );
 }
 
@@ -28,7 +32,11 @@ async function getCachedAccessData(session: any, startupId: string) {
   
   return globalCache.get(
     createCacheKey.userAccess(startupId, userId),
-    () => hasRequestedAccess(session, startupId)
+    () => hasRequestedAccess(session, startupId),
+    {
+      maxAge: CACHE_DURATION, // 2 minutes fresh
+      staleWhileRevalidate: 5 * 60 * 1000 // 5 minutes total (access status changes more frequently)
+    }
   );
 }
 
@@ -71,12 +79,13 @@ export default function index() {
     }
   );
 
-  // Auto-revalidation timer
+  // Auto-revalidation and cleanup timer
   let revalidationInterval: ReturnType<typeof setInterval>;
+  let cleanupInterval: ReturnType<typeof setInterval>;
   
   createEffect(() => {
     if (params.id) {
-      // Set up periodic revalidation every 5 minutes
+      // Set up periodic revalidation every 2 minutes
       revalidationInterval = setInterval(() => {
         const startupCacheKey = createCacheKey.startup(String(params.id));
         
@@ -85,12 +94,23 @@ export default function index() {
           setCacheInvalidationTrigger(prev => prev + 1);
         }
       }, CACHE_DURATION);
+
+      // Set up periodic cache cleanup every 5 minutes
+      cleanupInterval = setInterval(() => {
+        const cleanedCount = globalCache.cleanup();
+        if (cleanedCount > 0) {
+          console.log(`Cleaned up ${cleanedCount} expired cache entries`);
+        }
+      }, 5 * 60 * 1000); // 5 minutes
     }
   });
 
   onCleanup(() => {
     if (revalidationInterval) {
       clearInterval(revalidationInterval);
+    }
+    if (cleanupInterval) {
+      clearInterval(cleanupInterval);
     }
   });
 

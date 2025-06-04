@@ -7,6 +7,7 @@ import { createResource, createSignal, createEffect, onCleanup, onMount } from "
 import StartupList from "~/components/find/StartupList";
 import StartupSearch from "~/components/find/StartupSearch";
 import { globalCache, createCacheKey } from "~/lib/cache";
+import { Button } from "~/components/ui/button";
 
 const PAGE_SIZE = 10;
 
@@ -20,7 +21,7 @@ async function getCachedTags() {
     () => getAllTags(),
     {
       maxAge: 5 * 60 * 1000, // 5 minutes for tags (they change less frequently)
-      staleWhileRevalidate: 5 * 60 * 1000 // 15 minutes total
+      staleWhileRevalidate: 15 * 60 * 1000 // 15 minutes total
     }
   );
 }
@@ -29,10 +30,14 @@ async function getCachedTags() {
 async function getCachedStartups(page: number, pageSize: number, searchQuery?: string, tagIds?: number[]) {
   const tagsKey = tagIds ? tagIds.sort().join(',') : undefined;
   const cacheKey = createCacheKey.startupList(page, searchQuery, tagsKey);
-  
+
   return globalCache.get(
     cacheKey,
-    () => getStartups(page, pageSize, searchQuery, tagIds)
+    () => getStartups(page, pageSize, searchQuery, tagIds),
+    {
+      maxAge: CACHE_DURATION, // 2 minutes fresh
+      staleWhileRevalidate: 10 * 60 * 1000 // 10 minutes total
+    }
   );
 }
 
@@ -40,7 +45,7 @@ async function getCachedStartups(page: number, pageSize: number, searchQuery?: s
 export function preloadFindPageData() {
   // Preload tags data
   getCachedTags().catch(console.error);
-  
+
   // Preload first page of startups
   getCachedStartups(1, PAGE_SIZE).catch(console.error);
 }
@@ -97,12 +102,13 @@ export default function find() {
     }
   );
 
-  // Auto-revalidation timer for periodic cache refresh
+  // Auto-revalidation and cleanup timer
   let revalidationInterval: ReturnType<typeof setInterval>;
-  
+  let cleanupInterval: ReturnType<typeof setInterval>;
+
   createEffect(() => {
     if (mounted()) {
-      // Set up periodic revalidation every 5 minutes
+      // Set up periodic revalidation every 2 minutes
       revalidationInterval = setInterval(() => {
         // Check if we have any cached data before triggering revalidation
         const hasTagsCache = globalCache.has(createCacheKey.tags());
@@ -110,11 +116,19 @@ export default function find() {
         const hasStartupsCache = cacheKeys.some((key: string) =>
           key.startsWith('startups:')
         );
-        
+
         if (hasTagsCache || hasStartupsCache) {
           setCacheInvalidationTrigger(prev => prev + 1);
         }
       }, CACHE_DURATION);
+
+      // Set up periodic cache cleanup every 5 minutes
+      cleanupInterval = setInterval(() => {
+        const cleanedCount = globalCache.cleanup();
+        if (cleanedCount > 0) {
+          console.log(`Cleaned up ${cleanedCount} expired cache entries`);
+        }
+      }, 5 * 60 * 1000); // 5 minutes
     }
   });
 
@@ -127,6 +141,9 @@ export default function find() {
     if (revalidationInterval) {
       clearInterval(revalidationInterval);
     }
+    if (cleanupInterval) {
+      clearInterval(cleanupInterval);
+    }
   });
 
   return (
@@ -134,7 +151,10 @@ export default function find() {
       <Header session={sessionData} />
 
       <div class="container mx-auto px-4 max-w-6xl">
-        <h1 class="text-2xl font-bold mb-4 my-4">Найдите стартапы</h1>
+        <div class="flex items-center gap-5">
+          <h1 class="text-2xl font-bold mb-4 my-4">Найдите стартапы</h1>
+          <Button variant={"secondary"}>Создать</Button>
+        </div>
         <StartupSearch availableTags={tagsResource() || []} />
         <div class="mt-6">
           <StartupList startupsResource={startupsResource} mounted={mounted()} />

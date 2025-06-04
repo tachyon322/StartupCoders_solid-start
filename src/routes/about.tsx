@@ -17,7 +17,7 @@ export default function About() {
             Сайт создан на SolidStart фреймворке с использованием Drizzle, Betterauth. <br />
             Является некоммерческим проектом. <br />
             Мой тикток: <a href="https://t.me/yourusername" class="text-blue-500 hover:underline">@yourusername</a> <br />
-            Мой телеграм: <a href="https://t.me/yourusername" class="text-blue-500 hover:underline">@yourusername</a> <br />
+            Мой телеграм: <a href="https://t.me/QTSJSMA" class="text-blue-500 hover:underline">@QTSJSMA</a> <br />
           </p>
         </div>
       </main>

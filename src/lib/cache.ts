@@ -86,7 +86,28 @@ export class Cache {
   }
 
   has(key: string): boolean {
-    return this.cache.has(key);
+    const entry = this.cache.get(key);
+    if (!entry) return false;
+    
+    // Check if entry is still valid (not expired)
+    if (!this.isValid(entry.timestamp, this.defaultConfig.staleWhileRevalidate)) {
+      this.cache.delete(key);
+      return false;
+    }
+    
+    return true;
+  }
+
+  // Check if a cache entry is fresh (not stale)
+  isCacheFresh(key: string): boolean {
+    const entry = this.cache.get(key);
+    if (!entry) return false;
+    return this.isFresh(entry.timestamp, this.defaultConfig.maxAge);
+  }
+
+  // Get all cache keys (useful for debugging)
+  getKeys(): string[] {
+    return Array.from(this.cache.keys());
   }
 
   // Get cache statistics
@@ -123,10 +144,45 @@ export class Cache {
 
     return cleaned;
   }
+
+  // Force cleanup of stale entries (not just expired)
+  cleanupStale(): number {
+    const entries = Array.from(this.cache.entries());
+    let cleaned = 0;
+
+    entries.forEach(([key, entry]) => {
+      if (!this.isFresh(entry.timestamp, this.defaultConfig.maxAge)) {
+        this.cache.delete(key);
+        cleaned++;
+      }
+    });
+
+    return cleaned;
+  }
 }
 
-// Global cache instance
+// Global cache instance with automatic cleanup
 export const globalCache = new Cache();
+
+// Global cleanup timer - runs every 10 minutes to clean expired entries
+let globalCleanupInterval: ReturnType<typeof setInterval>;
+
+// Initialize global cleanup when module loads
+if (typeof window !== 'undefined') {
+  globalCleanupInterval = setInterval(() => {
+    const cleanedCount = globalCache.cleanup();
+    if (cleanedCount > 0) {
+      console.log(`[Global Cache] Cleaned up ${cleanedCount} expired cache entries`);
+    }
+  }, 10 * 60 * 1000); // 10 minutes
+}
+
+// Cleanup function for server-side or when needed
+export const stopGlobalCleanup = () => {
+  if (globalCleanupInterval) {
+    clearInterval(globalCleanupInterval);
+  }
+};
 
 // Utility functions for common cache key patterns
 export const createCacheKey = {
