@@ -8,6 +8,6 @@ export default defineConfig({
   schema: './auth-schema.ts',
   dialect: 'postgresql',
   dbCredentials: {
-    url: process.env.VITE_DATABASE_URL as string,
+    url: process.env.DATABASE_URL as string,
   },
 });

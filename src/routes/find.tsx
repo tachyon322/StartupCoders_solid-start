@@ -2,8 +2,8 @@ import Header from "~/components/landing/Header";
 import { useSession } from "~/lib/auth/session-context";
 import { getStartups } from "~/data/startup";
 import { getAllTags } from "~/data/user";
-import { useSearchParams } from "@solidjs/router";
-import { createResource, createSignal, createEffect, onCleanup, onMount } from "solid-js";
+import { A, useSearchParams } from "@solidjs/router";
+import { createResource, createSignal, onCleanup, onMount } from "solid-js";
 import StartupList from "~/components/find/StartupList";
 import StartupSearch from "~/components/find/StartupSearch";
 import { globalCache, createCacheKey } from "~/lib/cache";
@@ -58,11 +58,10 @@ export default function find() {
   const [searchParams] = useSearchParams();
   const sessionData = useSession();
   const [cacheInvalidationTrigger, setCacheInvalidationTrigger] = createSignal(0);
-  const [mounted, setMounted] = createSignal(false);
 
   // Optimized resource for tags with caching
   const [tagsResource] = createResource(
-    () => mounted() ? cacheInvalidationTrigger() : null,
+    () => cacheInvalidationTrigger(),
     () => getCachedTags()
   );
 
@@ -92,13 +91,6 @@ export default function find() {
     },
     async (params) => {
       return getCachedStartups(params.page, params.pageSize, params.searchQuery, params.tagIds);
-    },
-    {
-      // Enable SolidJS resource caching
-      storage: (init) => {
-        const [value, setValue] = createSignal(init);
-        return [value, setValue];
-      }
     }
   );
 
@@ -106,35 +98,28 @@ export default function find() {
   let revalidationInterval: ReturnType<typeof setInterval>;
   let cleanupInterval: ReturnType<typeof setInterval>;
 
-  createEffect(() => {
-    if (mounted()) {
-      // Set up periodic revalidation every 2 minutes
-      revalidationInterval = setInterval(() => {
-        // Check if we have any cached data before triggering revalidation
-        const hasTagsCache = globalCache.has(createCacheKey.tags());
-        const cacheKeys = Array.from((globalCache as any).cache.keys()) as string[];
-        const hasStartupsCache = cacheKeys.some((key: string) =>
-          key.startsWith('startups:')
-        );
-
-        if (hasTagsCache || hasStartupsCache) {
-          setCacheInvalidationTrigger(prev => prev + 1);
-        }
-      }, CACHE_DURATION);
-
-      // Set up periodic cache cleanup every 5 minutes
-      cleanupInterval = setInterval(() => {
-        const cleanedCount = globalCache.cleanup();
-        if (cleanedCount > 0) {
-          console.log(`Cleaned up ${cleanedCount} expired cache entries`);
-        }
-      }, 5 * 60 * 1000); // 5 minutes
-    }
-  });
-
-  // Set mounted state after hydration
   onMount(() => {
-    setMounted(true);
+    // Set up periodic revalidation every 2 minutes
+    revalidationInterval = setInterval(() => {
+      // Check if we have any cached data before triggering revalidation
+      const hasTagsCache = globalCache.has(createCacheKey.tags());
+      const cacheKeys = Array.from((globalCache as any).cache.keys()) as string[];
+      const hasStartupsCache = cacheKeys.some((key: string) =>
+        key.startsWith('startups:')
+      );
+
+      if (hasTagsCache || hasStartupsCache) {
+        setCacheInvalidationTrigger(prev => prev + 1);
+      }
+    }, CACHE_DURATION);
+
+    // Set up periodic cache cleanup every 5 minutes
+    cleanupInterval = setInterval(() => {
+      const cleanedCount = globalCache.cleanup();
+      if (cleanedCount > 0) {
+        console.log(`Cleaned up ${cleanedCount} expired cache entries`);
+      }
+    }, 5 * 60 * 1000); // 5 minutes
   });
 
   onCleanup(() => {
@@ -153,11 +138,12 @@ export default function find() {
       <div class="container mx-auto px-4 max-w-6xl">
         <div class="flex items-center gap-5">
           <h1 class="text-2xl font-bold mb-4 my-4">Найдите стартапы</h1>
-          <Button variant={"secondary"}>Создать</Button>
+          <A href="/create">
+          <Button variant={"secondary"}>Создать</Button></A>
         </div>
         <StartupSearch availableTags={tagsResource() || []} />
         <div class="mt-6">
-          <StartupList startupsResource={startupsResource} mounted={mounted()} />
+          <StartupList startupsResource={startupsResource} />
         </div>
       </div>
     </div>

@@ -105,7 +105,7 @@ export async function POST(event: APIEvent) {
     await db.update(schema.startupRequest)
       .set({
         status: 'approved',
-        updatedAt: new Date()
+        updatedAt: new Date(new Date().toISOString()) // Ensures UTC time
       })
       .where(eq(schema.startupRequest.id, requestIdNum));
     

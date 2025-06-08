@@ -30,36 +30,13 @@ export default function StartupCard(props: StartupCardProps): JSX.Element {
   });
 
   // Format creation time
-  const timeAgo = createMemo(() => {
-    if (!props.createdAt) return null;
-    
-    try {
-      let date: Date;
-      
-      if (typeof props.createdAt === 'string') {
-        // If the string doesn't include timezone info, treat it as UTC
-        if (!props.createdAt.includes('Z') && !props.createdAt.includes('+') && !props.createdAt.includes('-', 10)) {
-          // Add 'Z' to indicate UTC time
-          date = new Date(props.createdAt + 'Z');
-        } else {
-          date = new Date(props.createdAt);
-        }
-      } else {
-        date = props.createdAt;
-      }
-      
-      // Check if date is valid
-      if (isNaN(date.getTime())) return null;
-      
-      return formatDistanceToNow(date, {
-        addSuffix: true,
-        locale: ru
-      });
-    } catch (error) {
-      console.error('Error formatting date:', error);
-      return null;
+  const timeAgo = () => {
+    if (props.createdAt) {
+      const date = typeof props.createdAt === "string" ? new Date(props.createdAt) : props.createdAt;
+      return formatDistanceToNow(date, { addSuffix: true, locale: ru });
     }
-  });
+    return null;
+  };
 
   return (
     <A href={`/startup/${props.id}`} class="block h-full">

@@ -4,6 +4,7 @@ import db from "../lib/db";
 import * as schema from "../../auth-schema";
 import { eq, and, inArray, like, sql, desc, count } from "drizzle-orm";
 import { authClient } from "../lib/auth/auth-client";
+import { invalidateCache } from "../lib/cache";
 
 // Type definition for the Tag input
 export interface Tag {
@@ -85,26 +86,35 @@ export async function getStartups(
   // Calculate the skip value for pagination
   const skip = (page - 1) * pageSize;
   
-  // Build the query
-  // Execute the query with pagination and ordering
-  const query = db.select({
-    id: schema.startup.id,
-    name: schema.startup.name,
-    description: schema.startup.description,
-    createdAt: schema.startup.createdAt,
-    updatedAt: schema.startup.updatedAt,
-  }).from(schema.startup);
-
-  // Apply search filter if provided
+  // Build the query with conditional where clause
+  let startups;
+  
   if (searchQuery) {
-    query.where(sql`LOWER(${schema.startup.name}) LIKE LOWER(${`%${searchQuery}%`})`);
+    startups = await db.select({
+      id: schema.startup.id,
+      name: schema.startup.name,
+      description: schema.startup.description,
+      createdAt: schema.startup.createdAt,
+      updatedAt: schema.startup.updatedAt,
+    })
+    .from(schema.startup)
+    .where(sql`LOWER(${schema.startup.name}) LIKE LOWER(${`%${searchQuery}%`})`)
+    .limit(pageSize)
+    .offset(skip)
+    .orderBy(desc(schema.startup.createdAt));
+  } else {
+    startups = await db.select({
+      id: schema.startup.id,
+      name: schema.startup.name,
+      description: schema.startup.description,
+      createdAt: schema.startup.createdAt,
+      updatedAt: schema.startup.updatedAt,
+    })
+    .from(schema.startup)
+    .limit(pageSize)
+    .offset(skip)
+    .orderBy(desc(schema.startup.createdAt));
   }
-
-  // Execute the query with pagination and ordering
-  let startups = await query
-  .limit(pageSize)
-  .offset(skip)
-  .orderBy(desc(schema.startup.createdAt));
 
   // Filter by tags if provided
   if (tagIds && tagIds.length > 0) {
@@ -186,13 +196,16 @@ export async function getStartups(
   }));
 
   // Count total startups for pagination with the same filters
-  const countQuery = db.select({ value: count() }).from(schema.startup);
+  let totalResults;
   
   if (searchQuery) {
-    countQuery.where(sql`LOWER(${schema.startup.name}) LIKE LOWER(${`%${searchQuery}%`})`);
+    totalResults = await db.select({ value: count() })
+      .from(schema.startup)
+      .where(sql`LOWER(${schema.startup.name}) LIKE LOWER(${`%${searchQuery}%`})`);
+  } else {
+    totalResults = await db.select({ value: count() })
+      .from(schema.startup);
   }
-  
-  const totalResults = await countQuery;
   
   const totalStartups = totalResults[0]?.value || 0;
   
@@ -275,7 +288,7 @@ export async function createStartup(
     name,
     description,
     creatorUser: userId,
-    updatedAt: new Date(),
+    updatedAt: new Date(new Date().toISOString()), // Ensures UTC time
   }).returning();
   
   if (!newStartup) throw new Error("Failed to create startup");
@@ -308,6 +321,11 @@ export async function createStartup(
   
   // Get the complete startup data to return
   const startupWithRelations = await getStartupById(newStartup.id);
+  
+  // Invalidate cache after creating a new startup
+  // This will clear all startup lists and tags cache
+  invalidateCache.startupLists();
+  invalidateCache.tags();
   
   return startupWithRelations;
 }
@@ -464,7 +482,7 @@ export async function requestToParticipate(startupId: string, message: string, s
   // Create new request
   const [newRequest] = await db.insert(schema.startupRequest).values({
     message,
-    updatedAt: new Date(),
+    updatedAt: new Date(new Date().toISOString()), // Ensures UTC time
   }).returning();
   
   if (!newRequest) throw new Error("Failed to create request");
@@ -796,6 +814,17 @@ export async function acceptRequest(requestId: string) {
     .set({ startupRequestId: null })
     .where(eq(schema.startup.id, foundStartup.id));
 
+  // Invalidate cache after accepting request (participants changed)
+  invalidateCache.startupRelated(foundStartup.id);
+  invalidateCache.userProfile(session.user.id);
+  
+  // Also invalidate profiles of new participants
+  if (requesters.length > 0) {
+    requesters.forEach(requester => {
+      invalidateCache.userProfile(requester.userId);
+    });
+  }
+
   return true;
 }
 
@@ -866,6 +895,9 @@ export async function rejectRequest(requestId: string) {
   await db.update(schema.startup)
     .set({ startupRequestId: null })
     .where(eq(schema.startup.id, foundStartup.id));
+
+  // Invalidate cache after rejecting request
+  invalidateCache.startupRelated(foundStartup.id);
 
   return true;
 }

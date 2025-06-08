@@ -36,34 +36,11 @@ interface RequestCardProps {
 export default function RequestCard(props: RequestCardProps): JSX.Element {
   const [isLoading, setIsLoading] = createSignal(false);
 
-  // Format creation time
-  const timeAgo = createMemo(() => {
-    if (!props.createdAt) return null;
-    
-    try {
-      let date: Date;
-      
-      if (typeof props.createdAt === 'string') {
-        if (!props.createdAt.includes('Z') && !props.createdAt.includes('+') && !props.createdAt.includes('-', 10)) {
-          date = new Date(props.createdAt + 'Z');
-        } else {
-          date = new Date(props.createdAt);
-        }
-      } else {
-        date = props.createdAt;
-      }
-      
-      if (isNaN(date.getTime())) return null;
-      
-      return formatDistanceToNow(date, {
-        addSuffix: true,
-        locale: ru
-      });
-    } catch (error) {
-      console.error('Error formatting date:', error);
-      return null;
-    }
-  });
+  const timeAgo = () => {
+    if (!props.createdAt) return "";
+    const date = typeof props.createdAt === "string" ? new Date(props.createdAt) : props.createdAt;
+    return formatDistanceToNow(date, { addSuffix: true, locale: ru });
+  };
 
   const handleAccept = async () => {
     if (!props.onAccept) return;
