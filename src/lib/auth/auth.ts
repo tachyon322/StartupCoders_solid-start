@@ -19,7 +19,7 @@ export const auth = betterAuth({
         schema,
     }),
     baseURL: process.env.NODE_ENV === 'production'
-        ? "https://solid-test-mu.vercel.app"
+        ? "https://startupcoders.ru"
         : "http://localhost:3000",
     secret: getEnvVar('BETTER_AUTH_SECRET'),
     socialProviders: {
@@ -40,6 +40,7 @@ export const auth = betterAuth({
     },
     trustedOrigins: [
         "http://localhost:3000",
-        "https://solid-test-mu.vercel.app"
+        "https://solid-test-mu.vercel.app",
+        "https://startupcoders.ru/"
     ]
 });
