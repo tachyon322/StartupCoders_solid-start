@@ -11,8 +11,6 @@ import { getAllTags } from "~/data/user";
 import { createStartup as createStartupServer } from "~/data/startup";
 import { useNavigate } from "@solidjs/router";
 
-const navigate = useNavigate();
-
 // Function to fetch all available tags from the server
 async function fetchTags() {
   "use server";
@@ -33,6 +31,7 @@ async function createStartupAction(name: string, description: string, tags: Tag[
 
 export default function StartupForm(props: { session: any }) {
   const { session } = props;
+  const navigate = useNavigate(); // Move useNavigate inside the component
   const [name, setName] = createSignal("");
   const [description, setDescription] = createSignal("");
   const [selectedTags, setSelectedTags] = createSignal<Tag[]>([]);
@@ -84,7 +83,7 @@ export default function StartupForm(props: { session: any }) {
             setErrors({});
             setIsActive(false);
             showToast("Стартап успешно создан!", "success");
-            navigate("/startups"); // Redirect to the startups page after creation
+            navigate("/find"); // Redirect to the find page after creation (since /startups doesn't exist)
         })
         console.log("Стартап успешно создан!");
       }
@@ -110,37 +109,39 @@ export default function StartupForm(props: { session: any }) {
 
   return (
     <div class="w-full max-w-3xl mx-auto">
-      <div class="space-y-6">
+      <div class="space-y-4 md:space-y-6">
         <div class="space-y-2">
-          <Label for="name">Название стартапа</Label>
+          <Label for="name" class="text-sm md:text-base font-medium">Название стартапа</Label>
           <Input
             id="name"
             type="text"
             value={name()}
             onInput={(e) => setName(e.target.value)}
             placeholder="StartupCoders"
+            class="w-full text-sm md:text-base"
           />
           <Show when={errors().name}>
-            <p class="text-sm text-red-500">{errors().name}</p>
+            <p class="text-xs md:text-sm text-red-500 mt-1">{errors().name}</p>
           </Show>
         </div>
 
         <div class="space-y-2">
-          <Label for="description">Описание</Label>
+          <Label for="description" class="text-sm md:text-base font-medium">Описание</Label>
           <Textarea
             id="description"
             value={description()}
             onInput={(e) => setDescription(e.target.value)}
             placeholder="Веб-сайт для разработчиков"
             rows={4}
+            class="w-full text-sm md:text-base min-h-[100px] md:min-h-[120px]"
           />
           <Show when={errors().description}>
-            <p class="text-sm text-red-500">{errors().description}</p>
+            <p class="text-xs md:text-sm text-red-500 mt-1">{errors().description}</p>
           </Show>
         </div>
 
         <div class="space-y-2">
-          <Label for="tags">Теги</Label>
+          <Label for="tags" class="text-sm md:text-base font-medium">Теги</Label>
           <Show
             when={!tags.error}
             fallback={
@@ -159,33 +160,41 @@ export default function StartupForm(props: { session: any }) {
             />
           </Show>
           <Show when={!errors().tags}>
-            <p class="text-sm text-muted-foreground mt-1">
+            <p class="text-xs md:text-sm text-muted-foreground mt-1">
               Добавьте теги технологий которые вы используете, чтобы помочь другим пользователям найти вас
             </p>
           </Show>
           <Show when={errors().tags}>
-            <p class="text-sm text-red-500">{errors().tags}</p>
+            <p class="text-xs md:text-sm text-red-500 mt-1">{errors().tags}</p>
           </Show>
         </div>
 
         <div class="space-y-2">
-          <Label for="images">Изображения</Label>
+          <Label for="images" class="text-sm md:text-base font-medium">Изображения</Label>
           <ImageUpload value={images()} onChange={setImages} />
-          <p class="text-sm text-muted-foreground mt-1">
+          <p class="text-xs md:text-sm text-muted-foreground mt-1">
             Добавьте изображения, чтобы показать макеты или идеи (необязательно)
           </p>
         </div>
 
-        <div class="space-y-2 gap-2 flex flex-row justify-end">
+        <div class="flex flex-col-reverse sm:flex-row gap-3 sm:justify-end mt-6 md:mt-8">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => navigate("/find")}
+            class="w-full sm:w-auto h-10 md:h-11 text-sm md:text-base"
+          >
+            Отмена
+          </Button>
           <Button
             type="button"
             variant={"secondary"}
             onClick={handleSubmit}
             disabled={isActive()}
+            class="w-full sm:w-auto h-10 md:h-11 text-sm md:text-base"
           >
             {isActive() ? "Создание..." : "Создать"}
           </Button>
-          <Button>Отмена</Button>
         </div>
       </div>
 
