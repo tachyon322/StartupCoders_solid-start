@@ -12,7 +12,8 @@ import { Button } from "~/components/ui/button";
 const PAGE_SIZE = 10;
 
 // Cache configuration
-const CACHE_DURATION = 2 * 60 * 1000; // 2 minutes
+const CACHE_DURATION = 30 * 1000; // 30 seconds
+const STALE_WHILE_REVALIDATE_DURATION = 60 * 1000; // 1 minute
 
 // Cached tags fetcher with stale-while-revalidate
 async function getCachedTags() {
@@ -35,8 +36,8 @@ async function getCachedStartups(page: number, pageSize: number, searchQuery?: s
     cacheKey,
     () => getStartups(page, pageSize, searchQuery, tagIds),
     {
-      maxAge: CACHE_DURATION, // 2 minutes fresh
-      staleWhileRevalidate: 10 * 60 * 1000 // 10 minutes total
+      maxAge: CACHE_DURATION, // 30 seconds fresh
+      staleWhileRevalidate: STALE_WHILE_REVALIDATE_DURATION
     }
   );
 }
@@ -99,7 +100,15 @@ export default function find() {
   let cleanupInterval: ReturnType<typeof setInterval>;
 
   onMount(() => {
-    // Set up periodic revalidation every 2 minutes
+    // Force clear startup cache on mount to ensure fresh data
+    const cacheKeys = Array.from((globalCache as any).cache.keys()) as string[];
+    cacheKeys.forEach((key: string) => {
+      if (key.startsWith('startups:')) {
+        globalCache.delete(key);
+      }
+    });
+
+    // Set up periodic revalidation every 30 seconds
     revalidationInterval = setInterval(() => {
       // Check if we have any cached data before triggering revalidation
       const hasTagsCache = globalCache.has(createCacheKey.tags());
@@ -109,6 +118,13 @@ export default function find() {
       );
 
       if (hasTagsCache || hasStartupsCache) {
+        // Force delete startup cache entries to ensure fresh data
+        const cacheKeys = Array.from((globalCache as any).cache.keys()) as string[];
+        cacheKeys.forEach((key: string) => {
+          if (key.startsWith('startups:')) {
+            globalCache.delete(key);
+          }
+        });
         setCacheInvalidationTrigger(prev => prev + 1);
       }
     }, CACHE_DURATION);
