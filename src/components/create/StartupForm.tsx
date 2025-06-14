@@ -9,6 +9,9 @@ import { ImageUpload } from "../ui/image-upload";
 import { Toast } from "../ui/toast";
 import { getAllTags } from "~/data/user";
 import { createStartup as createStartupServer } from "~/data/startup";
+import { useNavigate } from "@solidjs/router";
+
+const navigate = useNavigate();
 
 // Function to fetch all available tags from the server
 async function fetchTags() {
@@ -81,6 +84,7 @@ export default function StartupForm(props: { session: any }) {
             setErrors({});
             setIsActive(false);
             showToast("Стартап успешно создан!", "success");
+            navigate("/startups"); // Redirect to the startups page after creation
         })
         console.log("Стартап успешно создан!");
       }
