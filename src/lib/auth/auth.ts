@@ -32,12 +32,6 @@ export const auth = betterAuth({
             clientSecret: getEnvVar('GOOGLE_CLIENT_SECRET') as string,
         }
     },
-    advanced: {
-        crossSubDomainCookies: {
-            enabled: true,
-        },
-        generateId: false,
-    },
     trustedOrigins: [
         "http://localhost:3000",
         "https://solid-test-mu.vercel.app",
