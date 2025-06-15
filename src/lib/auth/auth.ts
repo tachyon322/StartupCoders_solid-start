@@ -19,7 +19,7 @@ export const auth = betterAuth({
         schema,
     }),
     baseURL: process.env.NODE_ENV === 'production'
-        ? getEnvVar('BETTER_AUTH_URL') || "https://startupcoders.ru"
+        ? "https://startupcoders.ru"
         : "http://localhost:3000",
     secret: getEnvVar('BETTER_AUTH_SECRET'),
     socialProviders: {
