@@ -19,7 +19,7 @@ export const auth = betterAuth({
         schema,
     }),
     baseURL: process.env.NODE_ENV === 'production'
-        ? "https://startupcoders.ru"
+        ? getEnvVar('BETTER_AUTH_URL') || "https://startupcoders.ru"
         : "http://localhost:3000",
     secret: getEnvVar('BETTER_AUTH_SECRET'),
     socialProviders: {
@@ -35,6 +35,8 @@ export const auth = betterAuth({
     trustedOrigins: [
         "http://localhost:3000",
         "https://solid-test-mu.vercel.app",
-        "https://startupcoders.ru/"
+        "https://startupcoders.ru",      // without trailing slash
+        "https://startupcoders.ru/",     // with trailing slash
+        "http://83.220.169.202"          // your server IP
     ]
 });
