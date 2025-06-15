@@ -39,18 +39,17 @@ export default function HeroSection() {
             </div>
             <div class="md:w-1/2">
               <div class="relative code-block">
-                <div class="bg-indigo-800 rounded-xl p-4 sm:p-6 md:p-8 shadow-2xl">
-                  <div class="flex gap-2 sm:gap-3 mb-4 sm:mb-6">
-                    <div class="w-2 h-2 sm:w-3 sm:h-3 rounded-full bg-red-500"></div>
-                    <div class="w-2 h-2 sm:w-3 sm:h-3 rounded-full bg-yellow-500"></div>
-                    <div class="w-2 h-2 sm:w-3 sm:h-3 rounded-full bg-green-500"></div>
+                <div class="bg-indigo-800 rounded-xl p-8 shadow-2xl">
+                  <div class="flex gap-3 mb-6">
+                    <div class="w-3 h-3 rounded-full bg-red-500"></div>
+                    <div class="w-3 h-3 rounded-full bg-yellow-500"></div>
+                    <div class="w-3 h-3 rounded-full bg-green-500"></div>
                   </div>
-                  <div class="overflow-x-auto">
-                    <pre class="font-mono text-indigo-200 text-xs sm:text-sm whitespace-pre">
-                      <code>{`// Finding the perfect partner
+                  <pre class="font-mono text-indigo-200 text-sm">
+                    <code>{`// Finding the perfect partner
 const startupCoders = {
-  connect: () => developers.filter(dev =>
-    dev.skills.match(yourNeeds) &&
+  connect: () => developers.filter(dev => 
+    dev.skills.match(yourNeeds) && 
     dev.goals.align(yourVision)
   ),
   build: (team) => team.createAwesomeProduct(),
@@ -59,8 +58,7 @@ const startupCoders = {
 
 // Ready to code together?
 startupCoders.connect();`}</code>
-                    </pre>
-                  </div>
+                  </pre>
                 </div>
               </div>
             </div>

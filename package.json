@@ -6,8 +6,7 @@
     "build": "vinxi build",
     "start": "vinxi start",
     "version": "vinxi version",
-    "studio": "drizzle-kit studio",
-    "check:deploy": "node scripts/check-deployment.js"
+    "studio": "drizzle-kit studio"
   },
   "dependencies": {
     "@fontsource/inter": "^5.2.5",

@@ -6,21 +6,8 @@ import { useNavigate } from "@solidjs/router";
 import Header from "~/components/landing/Header";
 
 const handleSignIn = async (provider: "github" | "google") => {
-    try {
-        console.log(`Attempting to sign in with ${provider}`);
-        console.log('Current origin:', window.location.origin);
-        
-        const response = await authClient.signIn.social({
-            provider: provider,
-            callbackURL: `${window.location.origin}/api/auth/callback/${provider}`
-        });
-        
-        console.log('Sign in response:', response);
-    } catch (error) {
-        console.error('Sign in error:', error);
-        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-        alert(`Login failed: ${errorMessage}`);
-    }
+    const response = await authClient.signIn.social({ provider: provider });
+    console.log(response);
 };
 
 export default function login() {
