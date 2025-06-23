@@ -34,7 +34,9 @@ export const auth = betterAuth({
         crossSubDomainCookies: {
             enabled: true,
         },
-        generateId: false,
+        database: {
+            generateId: () => crypto.randomUUID(),
+        },
     },
     trustedOrigins: [
         "http://localhost:3000",
