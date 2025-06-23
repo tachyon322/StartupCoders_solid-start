@@ -18,54 +18,56 @@ export default function Header(props: HeaderProps) {
 
   return (
     <>
-      <header class="bg-indigo-950 text-white">
+      <header class="bg-indigo-950 text-white sticky top-0 z-40">
         <div class="container mx-auto px-4 max-w-6xl">
-          <div class="flex items-center justify-between py-4 relative">
+          <div class="flex items-center justify-between py-3 md:py-4 relative">
+            {/* Logo */}
             <div class="flex items-center">
               <a
                 href={merged.data ? "/find" : "/"}
-                class="text-2xl font-bold flex items-baseline logo"
+                class="text-xl md:text-2xl font-bold flex items-baseline logo"
               >
                 <span class="text-indigo-300">Startup</span>
                 <span>Coders</span>
-                <span class="text-indigo-300 text-sm ml-1">.ru</span>
+                <span class="text-indigo-300 text-xs md:text-sm ml-1">.ru</span>
               </a>
             </div>
 
             {/* Desktop Navigation - Centered */}
-            <nav class="hidden md:flex items-center space-x-10 absolute left-1/2 transform -translate-x-1/2">
+            <nav class="hidden md:flex items-center space-x-6 lg:space-x-10 absolute left-1/2 transform -translate-x-1/2">
               <a
                 href="/find"
-                class="hover:text-indigo-300 transition-colors"
+                class="hover:text-indigo-300 transition-colors text-sm lg:text-base"
               >
                 Найти
               </a>
               <a
                 href="/donate"
-                class="hover:text-indigo-300 transition-colors"
+                class="hover:text-indigo-300 transition-colors text-sm lg:text-base"
               >
                 Помочь сайту
               </a>
               <a
                 href="/about"
-                class="hover:text-indigo-300 transition-colors"
+                class="hover:text-indigo-300 transition-colors text-sm lg:text-base"
               >
                 О нас
               </a>
             </nav>
 
+            {/* Desktop Auth/User */}
             <Show
               when={merged.data}
               fallback={
                 <div class="hidden md:flex items-center space-x-4">
                   <A
-                    class="text-indigo-300 hover:text-white py-2 w-full text-left transition-colors"
+                    class="text-indigo-300 hover:text-white py-2 text-left transition-colors text-sm lg:text-base"
                     href="/login"
                   >
                     Войти
                   </A>
                   <A
-                    class="bg-indigo-500 hover:bg-indigo-600 text-white py-2 px-4 rounded-lg transition-all"
+                    class="bg-indigo-500 hover:bg-indigo-600 text-white py-2 px-4 rounded-lg transition-all text-sm lg:text-base"
                     href="/login"
                   >
                     Регистрация
@@ -75,38 +77,18 @@ export default function Header(props: HeaderProps) {
             >
               <div class="items-center hidden md:flex">
                 <UserDropdown session={merged.data} />
-                {/* {JSON.stringify(merged.data)} */}
               </div>
             </Show>
 
-            {/* Mobile Menu Button */}
-            <div class="md:hidden flex gap-3">
-              <Show
-                when={merged.data}
-                fallback={
-                  <div class="flex items-center space-x-4">
-                    <A
-                      class="text-indigo-300 hover:text-white py-2 text-left transition-colors"
-                      href="/login"
-                    >
-                      Войти
-                    </A>
-                    <A
-                      class="bg-indigo-500 hover:bg-indigo-600 text-white py-2 px-4 rounded-lg transition-all"
-                      href="/login"
-                    >
-                      Регистрация
-                    </A>
-                  </div>
-                }
-              >
-                <div class="flex items-center">
-                  <UserDropdown session={merged.data} />
-                </div>
+            {/* Mobile Controls */}
+            <div class="md:hidden flex items-center gap-2">
+              <Show when={merged.data}>
+                <UserDropdown session={merged.data} />
               </Show>
               <button
                 onClick={() => setIsMenuOpen(!isMenuOpen())}
-                class="text-white"
+                class="text-white p-2 -mr-2 focus:outline-none focus:bg-indigo-800 rounded-lg transition-colors"
+                aria-label="Toggle menu"
               >
                 <Show
                   when={isMenuOpen()}
@@ -148,52 +130,50 @@ export default function Header(props: HeaderProps) {
 
           {/* Mobile Menu */}
           <Show when={isMenuOpen()}>
-            <div class="md:hidden py-4 border-t border-indigo-800">
-              <nav class="flex flex-col space-y-4">
+            <div class="md:hidden py-4 border-t border-indigo-800 absolute top-full left-0 right-0 bg-indigo-950 shadow-lg">
+              <nav class="flex flex-col px-4">
                 <a
                   href="/find"
-                  class="hover:text-indigo-300 transition-colors"
+                  class="py-3 px-2 hover:bg-indigo-800 hover:text-indigo-300 transition-colors rounded-lg"
+                  onClick={() => setIsMenuOpen(false)}
                 >
                   Найти
                 </a>
                 <a
                   href="/donate"
-                  class="hover:text-indigo-300 transition-colors"
+                  class="py-3 px-2 hover:bg-indigo-800 hover:text-indigo-300 transition-colors rounded-lg"
+                  onClick={() => setIsMenuOpen(false)}
                 >
                   Помочь сайту
                 </a>
                 <a
                   href="/about"
-                  class="hover:text-indigo-300 transition-colors"
+                  class="py-3 px-2 hover:bg-indigo-800 hover:text-indigo-300 transition-colors rounded-lg"
+                  onClick={() => setIsMenuOpen(false)}
                 >
                   О нас
                 </a>
               </nav>
 
-              {/* Mobile user/auth elements */}
-              <div class="mt-6 flex flex-col space-y-2">
-                <Show
-                  when={merged.data}
-                  fallback={
-                    <div>
-                      <button
-                        class="text-indigo-300 hover:text-white py-2 w-full text-left transition-colors"
-                        onClick={openLoginModal}
-                      >
-                        Войти
-                      </button>
-                      <button
-                        class="bg-indigo-500 hover:bg-indigo-600 text-white py-2 px-4 rounded-lg transition-all"
-                        onClick={openLoginModal}
-                      >
-                        Регистрация
-                      </button>
-                    </div>
-                  }
-                >
-                  <div class="flex items-center"></div>
-                </Show>
-              </div>
+              {/* Mobile auth buttons for non-logged in users */}
+              <Show when={!merged.data}>
+                <div class="mt-4 px-4 pb-2 flex flex-col gap-2">
+                  <A
+                    class="text-indigo-300 hover:text-white py-3 px-4 text-center transition-colors border border-indigo-600 rounded-lg hover:bg-indigo-800"
+                    href="/login"
+                    onClick={() => setIsMenuOpen(false)}
+                  >
+                    Войти
+                  </A>
+                  <A
+                    class="bg-indigo-500 hover:bg-indigo-600 text-white py-3 px-4 rounded-lg transition-all text-center"
+                    href="/login"
+                    onClick={() => setIsMenuOpen(false)}
+                  >
+                    Регистрация
+                  </A>
+                </div>
+              </Show>
             </div>
           </Show>
         </div>

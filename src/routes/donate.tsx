@@ -26,8 +26,8 @@ export default function Donate() {
           </div>
           <div class="mb-4 w-full">
             <div class="font-semibold text-lg mb-1">Крипто-кошельки</div>
-            <div class="bg-white dark:bg-gray-800 rounded p-2 text-sm font-mono select-all border border-gray-200 dark:border-gray-700 mb-1">BTC: bc1qexampleaddress1234567890</div>
-            <div class="bg-white dark:bg-gray-800 rounded p-2 text-sm font-mono select-all border border-gray-200 dark:border-gray-700">ETH: 0xExampleEthereumAddress1234567890</div>
+            <div class="bg-white dark:bg-gray-800 rounded p-2 text-sm font-mono select-all border border-gray-200 dark:border-gray-700 mb-1">BTC: bc1q033fl8vyp3t64e6zmnnnh9zcxtnefx4m5p2p7c</div>
+            <div class="bg-white dark:bg-gray-800 rounded p-2 text-sm font-mono select-all border border-gray-200 dark:border-gray-700">ETH: 0x9d4e1314eb5E82456eA52f193B2d55a989dDb526</div>
           </div>
           <p class="text-gray-500 text-xs mt-4 text-center">Спасибо за вашу поддержку! Все средства идут на развитие платформы.</p>
         </div>

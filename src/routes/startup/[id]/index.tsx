@@ -157,38 +157,46 @@ export default function index() {
   };
 
   return (
-    <div>
+    <div class="min-h-screen bg-gray-50">
       <Header session={session} />
 
-      <div class="container mx-auto px-4 flex max-w-6xl gap-2 mt-2">
+      <div class="container mx-auto px-4 py-4 md:py-6 max-w-6xl">
         <ErrorBoundary fallback={StartupErrorFallback}>
           <Suspense fallback={<StartupLoadingSkeleton />}>
             <Show
               when={mounted() && !startupData.loading && startupData()}
               fallback={
                 <Show when={mounted()} fallback={
-                  <div class="flex justify-center items-center w-full h-64">
-                    <div class="text-lg">Загрузка...</div>
+                  <div class="flex justify-center items-center w-full min-h-[50vh]">
+                    <div class="text-base md:text-lg text-gray-600">Загрузка...</div>
                   </div>
                 }>
                   <StartupLoadingSkeleton />
                 </Show>
               }
             >
-              <StartupLeftCard startup={startupData() || undefined} />
-              <StartupRightCard
-                startup={startupData() || undefined}
-                width={400}
-                height={600}
-                isRequestedAccess={!!isRequestedAccess()}
-                onRequestSent={handleRequestSent}
-                session={session()}
-              />
+              {/* Mobile-first responsive layout */}
+              <div class="flex flex-col lg:flex-row gap-4 lg:gap-6">
+                {/* Left card - full width on mobile, flexible on desktop */}
+                <div class="w-full lg:flex-1">
+                  <StartupLeftCard startup={startupData() || undefined} />
+                </div>
+                
+                {/* Right card - full width on mobile, fixed width on desktop */}
+                <div class="w-full lg:w-[400px] lg:flex-shrink-0">
+                  <StartupRightCard
+                    startup={startupData() || undefined}
+                    isRequestedAccess={!!isRequestedAccess()}
+                    onRequestSent={handleRequestSent}
+                    session={session()}
+                  />
+                </div>
+              </div>
             </Show>
 
             <Show when={!startupData.loading && !startupData()}>
-              <div class="flex justify-center items-center w-full h-64">
-                <div class="text-lg text-red-500">Стартап не найден</div>
+              <div class="flex justify-center items-center w-full min-h-[50vh]">
+                <div class="text-base md:text-lg text-red-500">Стартап не найден</div>
               </div>
             </Show>
           </Suspense>

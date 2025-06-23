@@ -44,9 +44,9 @@ export default function StartupLeftCard(props: StartupLeftCardProps) {
 
     return (
         <>
-            <Card class="w-full" style={{ width: props.width ? `${props.width}px` : "100%", height: props.height ? `${props.height}px` : "auto" }}>
+            <Card class="w-full h-full">
             <Show when={props.startup} fallback={
-                <div class="p-6">
+                <div class="p-4 md:p-6">
                     <div class="animate-pulse">
                         <div class="h-6 bg-gray-200 rounded mb-2"></div>
                         <div class="h-4 bg-gray-200 rounded mb-4"></div>
@@ -54,21 +54,32 @@ export default function StartupLeftCard(props: StartupLeftCardProps) {
                     </div>
                 </div>
             }>
-                <CardHeader class="space-y-2">
-                    <CardTitle class="text-lg font-semibold"><h1>{props.startup!.name}</h1></CardTitle>
+                <CardHeader class="p-4 md:p-6 space-y-2">
+                    <CardTitle class="text-lg md:text-xl font-semibold break-words">
+                        <h1>{props.startup!.name}</h1>
+                    </CardTitle>
                 </CardHeader>
-                <CardContent class="space-y-4">
+                <CardContent class="p-4 md:p-6 pt-0 md:pt-0 space-y-4 md:space-y-6">
                     <div>
-                        <h4 class="font-semibold mb-2">Описание</h4>
-                        <p class="text-gray-600">{props.startup!.description}</p>
+                        <h4 class="font-semibold mb-2 text-base md:text-lg">Описание</h4>
+                        <p class="text-sm md:text-base text-gray-600 break-words whitespace-pre-wrap">
+                            {props.startup!.description}
+                        </p>
                     </div>
 
                     <Show when={props.startup!.tags.length > 0}>
                         <div>
-                            <h4 class="font-semibold mb-2">Теги</h4>
-                            <div class="flex flex-wrap gap-2">
+                            <h4 class="font-semibold mb-2 text-base md:text-lg">Теги</h4>
+                            <div class="flex flex-wrap gap-1.5 md:gap-2">
                                 <For each={props.startup!.tags}>
-                                    {(tag) => <Badge variant="secondary">{tag.name}</Badge>}
+                                    {(tag) => (
+                                        <Badge
+                                            variant="secondary"
+                                            class="text-xs md:text-sm px-2 py-1 md:px-3 md:py-1.5"
+                                        >
+                                            {tag.name}
+                                        </Badge>
+                                    )}
                                 </For>
                             </div>
                         </div>
@@ -76,24 +87,27 @@ export default function StartupLeftCard(props: StartupLeftCardProps) {
 
                     <Show when={props.startup!.images.length > 0}>
                         <div>
-                            <h4 class="font-semibold mb-2">Изображения</h4>
-                            <div class="grid grid-cols-2 gap-2">
+                            <h4 class="font-semibold mb-2 text-base md:text-lg">Изображения</h4>
+                            <div class="grid grid-cols-2 gap-2 md:gap-3">
                                 <For each={props.startup!.images.slice(0, 4)}>
                                     {(image) => (
-                                        <img
-                                            src={image.url}
-                                            alt="Startup image"
-                                            class="w-full h-48 object-cover rounded cursor-pointer hover:opacity-80 transition-opacity"
-                                            onClick={() => openLightbox(image.url)}
-                                        />
+                                        <div class="relative aspect-square overflow-hidden rounded-lg">
+                                            <img
+                                                src={image.url}
+                                                alt="Startup image"
+                                                class="w-full h-full object-cover cursor-pointer hover:opacity-80 transition-opacity touch-manipulation"
+                                                onClick={() => openLightbox(image.url)}
+                                                loading="lazy"
+                                            />
+                                        </div>
                                     )}
                                 </For>
                             </div>
                         </div>
                     </Show>
                 </CardContent>
-                <CardFooter>
-                    <div class="text-sm text-gray-500">
+                <CardFooter class="p-4 md:p-6 pt-0 md:pt-0">
+                    <div class="text-xs md:text-sm text-gray-500">
                         Создано {new Date(props.startup!.createdAt).toLocaleDateString()}
                     </div>
                 </CardFooter>
