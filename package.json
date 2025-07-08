@@ -11,7 +11,7 @@
   "dependencies": {
     "@fontsource/inter": "^5.2.5",
     "@kobalte/core": "^0.13.10",
-    "@prisma/client": "^6.7.0",
+    "@prisma/client": "^6.11.1",
     "@solidjs/meta": "^0.29.4",
     "@solidjs/router": "^0.15.0",
     "@solidjs/start": "^1.1.0",
@@ -26,12 +26,12 @@
     "drizzle-orm": "^0.43.1",
     "pg": "^8.16.0",
     "postcss": "^8.5.3",
-    "prisma": "^6.7.0",
+    "prisma": "^6.11.1",
     "solid-js": "^1.9.5",
     "tailwind-merge": "^3.3.0",
     "tailwindcss": "^4.1.6",
     "tailwindcss-animate": "^1.0.7",
-    "tsx": "^4.19.4",
+    "tsx": "^4.20.3",
     "uploadthing": "^7.7.2",
     "vinxi": "^0.5.3",
     "zod": "^3.24.4"

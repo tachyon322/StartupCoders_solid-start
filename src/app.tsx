@@ -4,7 +4,6 @@ import { FileRoutes } from "@solidjs/start/router";
 import { Suspense } from "solid-js";
 import "@fontsource/inter"
 import "./app.css";
-import { SessionProvider } from "./lib/auth/session-context";
 
 export default function App() {
   return (
@@ -12,9 +11,7 @@ export default function App() {
       root={(props) => (
         <MetaProvider>
           <Title>StartupCoders</Title>
-          <SessionProvider>
             <Suspense>{props.children}</Suspense>
-          </SessionProvider>
         </MetaProvider>
       )}
     >

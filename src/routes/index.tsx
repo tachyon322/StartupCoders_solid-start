@@ -5,6 +5,9 @@ import HeroSection from "~/components/landing/HeroSection";
 import HowItWorks from "~/components/landing/HowItWorks";
 import Features from "~/components/landing/Features";
 import CTA from "~/components/landing/CTA";
+import { createAsync } from "@solidjs/router";
+import { getRequestEvent } from "solid-js/web";
+import { auth } from "~/lib/auth/auth";
 
 export const meta = () => {
   return {
@@ -13,8 +16,27 @@ export const meta = () => {
   };
 };
 
+// Server function to get session
+async function getServerSession() {
+  "use server";
+
+  const event = getRequestEvent();
+  if (!event) return null;
+
+  try {
+    const session = await auth.api.getSession({
+      headers: event.request.headers
+    });
+
+    return session;
+  } catch (error) {
+    console.error("Server session error:", error);
+    return null;
+  }
+}
+
 export default function Home() {
-  const sessionData = useSession();
+  const sessionData = createAsync(() => getServerSession());
   return (
     <>
       <Title>Startup Coders</Title>

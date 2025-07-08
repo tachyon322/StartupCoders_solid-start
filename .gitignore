@@ -25,3 +25,9 @@ gitignore
 # System Files
 .DS_Store
 Thumbs.db
+
+/src/generated/prisma
+
+/src/generated/prisma
+
+/src/generated/prisma

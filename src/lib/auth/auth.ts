@@ -1,33 +1,27 @@
 import { betterAuth } from "better-auth";
-import { drizzleAdapter } from "better-auth/adapters/drizzle";
-import db from "../db";
-import * as schema from "../../../auth-schema";
+import { prismaAdapter } from "better-auth/adapters/prisma";
+import { PrismaClient } from "~/generated/prisma";
 
+const prisma = new PrismaClient();
 export const auth = betterAuth({
-    database: drizzleAdapter(db, {
-        provider: "pg",
-        schema,
+    database: prismaAdapter(prisma, {
+        provider: "postgresql", // or "mysql", "postgresql", ...etc
     }),
-    baseURL: process.env.BETTER_AUTH_URL || process.env.VITE_BETTER_AUTH_URL || "http://localhost:3000",
-    secret: process.env.BETTER_AUTH_SECRET,
+    baseURL: process.env.BETTER_AUTH_URL || "http://localhost:3000",
+    emailAndPassword: {
+        enabled: true
+    },
     socialProviders: {
-        github: {
-            clientId: process.env.GITHUB_CLIENT_ID as string,
-            clientSecret: process.env.GITHUB_CLIENT_SECRET as string,
+        discord: {
+            clientId: process.env.DISCORD_ID as string,
+            clientSecret: process.env.DISCORD_SECRET as string,
         },
-        google: {
-            clientId: process.env.GOOGLE_CLIENT_ID as string,
-            clientSecret: process.env.GOOGLE_CLIENT_SECRET as string,
+        github: {
+            clientId: process.env.GITHUB_ID as string,
+            clientSecret: process.env.GITHUB_SECRET as string,
         }
     },
-    logger: {
-        level: "debug",
-        disabled: false,
-    },
     trustedOrigins: [
-        "http://localhost:3000",
-        "https://solid-test-mu.vercel.app",
-        "https://startupcoders.ru",
-        "https://www.startupcoders.ru",
-    ]
+        process.env.BETTER_AUTH_URL || "http://localhost:3000"
+    ],
 });
