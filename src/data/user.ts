@@ -1,17 +1,6 @@
 "use server";
 
-import db from "../lib/db";
-import { eq, desc, asc, and, not, sql, inArray } from "drizzle-orm";
-import {
-  user,
-  tag,
-  userToTag,
-  startup,
-  userToStartup,
-  startupToTag,
-  images,
-  userToStartupRequest
-} from "../../auth-schema";
+import { Pool } from 'pg';
 
 // Define Tag interface to match the original import
 export interface Tag {
@@ -19,46 +8,35 @@ export interface Tag {
   name: string;
 }
 
-// Base selection objects to maintain consistency and avoid overfetching
-const baseUserSelect = {
-  id: user.id,
-  name: user.name,
-  username: user.username,
-  image: user.image
-};
-
-const baseTagSelect = {
-  id: tag.id,
-  name: tag.name
-};
-
-const baseImageSelect = {
-  id: images.id,
-  url: images.url
-};
+// Create a pool instance for database connections
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+});
 
 // Optimized function to find user by identifier (username or id)
 // This is extracted to avoid code duplication and improve performance
 async function findUserByIdentifier(identifier: string) {
   // Try to find the user by username first
-  let userInfo = await db.query.user.findFirst({
-    where: eq(user.username, identifier),
-    columns: { id: true }
-  });
+  const userByUsernameResult = await pool.query(
+    'SELECT id FROM "user" WHERE username = $1',
+    [identifier]
+  );
 
-  // If not found by username, try by ID
-  if (!userInfo) {
-    userInfo = await db.query.user.findFirst({
-      where: eq(user.id, identifier),
-      columns: { id: true }
-    });
-
-    if (!userInfo) {
-      return null;
-    }
+  if (userByUsernameResult.rows.length > 0) {
+    return userByUsernameResult.rows[0];
   }
 
-  return userInfo;
+  // If not found by username, try by ID
+  const userByIdResult = await pool.query(
+    'SELECT id FROM "user" WHERE id = $1',
+    [identifier]
+  );
+
+  if (userByIdResult.rows.length > 0) {
+    return userByIdResult.rows[0];
+  }
+
+  return null;
 }
 
 // Optimized user query with proper data selection
@@ -72,43 +50,60 @@ export async function getUser(identifier: string) {
   const userId = userInfo.id;
 
   // Get basic user data
-  const userData = await db.query.user.findFirst({
-    where: eq(user.id, userId)
-  });
+  const userDataResult = await pool.query(
+    'SELECT * FROM "user" WHERE id = $1',
+    [userId]
+  );
 
-  if (!userData) return null;
+  if (userDataResult.rows.length === 0) return null;
+
+  const userData = userDataResult.rows[0];
 
   // Get user tags
-  const userTags = await db.query.userToTag.findMany({
-    where: eq(userToTag.userId, userId),
-    with: {
-      tag: true
-    }
-  });
+  const userTagsResult = await pool.query(
+    `SELECT t.id, t.name 
+     FROM tag_to_user ttu 
+     JOIN tag t ON ttu."tagId" = t.id 
+     WHERE ttu."userId" = $1`,
+    [userId]
+  );
 
-  // Get created startups
-  const createdStartups = await db.query.startup.findMany({
-    where: eq(startup.creatorUser, userId),
-    with: {
-      tags: {
-        with: {
-          tag: true
-        }
-      },
-      images: {
-        limit: 1
-      }
-    }
-  });
+  // Get created startups with tags and images
+  const createdStartupsResult = await pool.query(
+    `SELECT s.*, 
+            COALESCE(
+              json_agg(DISTINCT jsonb_build_object('id', t.id, 'name', t.name)) 
+              FILTER (WHERE t.id IS NOT NULL), 
+              '[]'::json
+            ) as tags,
+            COALESCE(
+              json_agg(DISTINCT jsonb_build_object('id', i.id, 'url', i.url)) 
+              FILTER (WHERE i.id IS NOT NULL), 
+              '[]'::json
+            ) as images
+     FROM startup s
+     LEFT JOIN tag_to_startup tts ON s.id = tts."startupId"
+     LEFT JOIN tag t ON tts."tagId" = t.id
+     LEFT JOIN images i ON s.id = i."startupId"
+     WHERE s."creatorUser" = $1
+     GROUP BY s.id`,
+    [userId]
+  );
 
-  // Get startup participants for created startups
-  const createdStartupIds = createdStartups.map(s => s.id);
-  const createdStartupParticipants = await db.query.userToStartup.findMany({
-    where: inArray(userToStartup.startupId, createdStartupIds),
-    with: {
-      user: true
-    }
-  });
+  // Get participants for created startups
+  const createdStartupIds = createdStartupsResult.rows.map(s => s.id);
+  let createdStartupParticipants = [];
+  
+  if (createdStartupIds.length > 0) {
+    const participantsResult = await pool.query(
+      `SELECT sp."startupId", u.id, u.name, u.username, u.image
+       FROM startup_participants sp
+       JOIN "user" u ON sp."userId" = u.id
+       WHERE sp."startupId" = ANY($1::text[])`,
+      [createdStartupIds]
+    );
+    createdStartupParticipants = participantsResult.rows;
+  }
 
   // Group participants by startup
   const participantsByStartup: Record<string, any[]> = {};
@@ -116,41 +111,51 @@ export async function getUser(identifier: string) {
     if (!participantsByStartup[p.startupId]) {
       participantsByStartup[p.startupId] = [];
     }
-    participantsByStartup[p.startupId].push(p.user);
+    participantsByStartup[p.startupId].push({
+      id: p.id,
+      name: p.name,
+      username: p.username,
+      image: p.image
+    });
   });
 
   // Get participating startups (not created by user)
-  const participatingStartupIds = await db.query.userToStartup.findMany({
-    where: eq(userToStartup.userId, userId),
-    columns: {
-      startupId: true
-    }
-  });
-
-  const participatingStartups = await db.query.startup.findMany({
-    where: and(
-      not(eq(startup.creatorUser, userId)),
-      inArray(startup.id, participatingStartupIds.map(p => p.startupId))
-    ),
-    with: {
-      tags: {
-        with: {
-          tag: true
-        }
-      },
-      images: {
-        limit: 1
-      }
-    }
-  });
+  const participatingStartupsResult = await pool.query(
+    `SELECT s.*, 
+            COALESCE(
+              json_agg(DISTINCT jsonb_build_object('id', t.id, 'name', t.name)) 
+              FILTER (WHERE t.id IS NOT NULL), 
+              '[]'::json
+            ) as tags,
+            COALESCE(
+              json_agg(DISTINCT jsonb_build_object('id', i.id, 'url', i.url)) 
+              FILTER (WHERE i.id IS NOT NULL), 
+              '[]'::json
+            ) as images
+     FROM startup_participants sp
+     JOIN startup s ON sp."startupId" = s.id
+     LEFT JOIN tag_to_startup tts ON s.id = tts."startupId"
+     LEFT JOIN tag t ON tts."tagId" = t.id
+     LEFT JOIN images i ON s.id = i."startupId"
+     WHERE sp."userId" = $1 AND s."creatorUser" != $1
+     GROUP BY s.id`,
+    [userId]
+  );
 
   // Get participants for participating startups
-  const participatingStartupParticipants = await db.query.userToStartup.findMany({
-    where: inArray(userToStartup.startupId, participatingStartups.map(s => s.id)),
-    with: {
-      user: true
-    }
-  });
+  const participatingStartupIds = participatingStartupsResult.rows.map(s => s.id);
+  let participatingStartupParticipants = [];
+  
+  if (participatingStartupIds.length > 0) {
+    const participantsResult = await pool.query(
+      `SELECT sp."startupId", u.id, u.name, u.username, u.image
+       FROM startup_participants sp
+       JOIN "user" u ON sp."userId" = u.id
+       WHERE sp."startupId" = ANY($1::text[])`,
+      [participatingStartupIds]
+    );
+    participatingStartupParticipants = participantsResult.rows;
+  }
 
   // Group participants by startup
   const participatingParticipantsByStartup: Record<string, any[]> = {};
@@ -158,43 +163,54 @@ export async function getUser(identifier: string) {
     if (!participatingParticipantsByStartup[p.startupId]) {
       participatingParticipantsByStartup[p.startupId] = [];
     }
-    participatingParticipantsByStartup[p.startupId].push(p.user);
+    participatingParticipantsByStartup[p.startupId].push({
+      id: p.id,
+      name: p.name,
+      username: p.username,
+      image: p.image
+    });
   });
 
   // Get user's startup requests
-  const userStartupRequests = await db.query.userToStartupRequest.findMany({
-    where: eq(userToStartupRequest.userId, userId),
-    with: {
-      startupRequest: true
-    }
-  });
+  const userStartupRequestsResult = await pool.query(
+    `SELECT sr.*, sru."userId"
+     FROM startup_request_users sru
+     JOIN startup_request sr ON sru."startupRequestId" = sr.id
+     WHERE sru."userId" = $1`,
+    [userId]
+  );
 
   // Transform the data to match the expected structure
   const transformedUser = {
     ...userData,
-    tags: userTags.map(t => t.tag),
-    createdStartups: createdStartups.map(startup => ({
+    tags: userTagsResult.rows,
+    createdStartups: createdStartupsResult.rows.map(startup => ({
       ...startup,
-      tags: startup.tags.map(t => t.tag),
+      tags: startup.tags,
+      images: startup.images,
       participants: participantsByStartup[startup.id] || []
     })),
-    participatingStartups: participatingStartups.map(startup => ({
+    participatingStartups: participatingStartupsResult.rows.map(startup => ({
       ...startup,
-      tags: startup.tags.map(t => t.tag),
+      tags: startup.tags,
+      images: startup.images,
       participants: participatingParticipantsByStartup[startup.id] || []
     })),
-    receivedStartupRequests: userStartupRequests
+    receivedStartupRequests: userStartupRequestsResult.rows.map(req => ({
+      startupRequest: req,
+      userId: req.userId
+    }))
   };
 
   return transformedUser;
 }
 
 export async function getAllTags() {
-  const tags = await db.query.tag.findMany({
-    orderBy: asc(tag.name)
-  });
+  const result = await pool.query(
+    'SELECT * FROM tag ORDER BY name ASC'
+  );
 
-  return tags;
+  return result.rows;
 }
 
 export async function updateUserDescription(identifier: string, description: string) {
@@ -204,13 +220,12 @@ export async function updateUserDescription(identifier: string, description: str
     throw new Error("User not found");
   }
 
-  const [updatedUser] = await db
-    .update(user)
-    .set({ description })
-    .where(eq(user.id, userInfo.id))
-    .returning();
+  const result = await pool.query(
+    'UPDATE "user" SET description = $1 WHERE id = $2 RETURNING *',
+    [description, userInfo.id]
+  );
 
-  return updatedUser;
+  return result.rows[0];
 }
 
 export async function updateUserTags(identifier: string, tags: Tag[]) {
@@ -221,97 +236,105 @@ export async function updateUserTags(identifier: string, tags: Tag[]) {
   }
 
   // Get existing user
-  const userData = await db.query.user.findFirst({
-    where: eq(user.id, userInfo.id),
-    with: {
-      tags: {
-        with: {
-          tag: true
-        }
-      }
-    }
-  });
+  const userDataResult = await pool.query(
+    'SELECT * FROM "user" WHERE id = $1',
+    [userInfo.id]
+  );
 
-  if (!userData) {
+  if (userDataResult.rows.length === 0) {
     throw new Error("User not found");
   }
 
-  // Separate existing tags from new tags
-  const existingTagIds = tags
-    .filter(tag => tag.id)
-    .map(tag => tag.id as number);
+  const client = await pool.connect();
+  
+  try {
+    await client.query('BEGIN');
 
-  // For new tags, we'll need to check if they already exist in the database or create them
-  const newTagNames = tags
-    .filter(tag => !tag.id)
-    .map(tag => tag.name);
+    // Separate existing tags from new tags
+    const existingTagIds = tags
+      .filter(tag => tag.id)
+      .map(tag => tag.id as number);
 
-  // First, delete all existing tag connections
-  await db
-    .delete(userToTag)
-    .where(eq(userToTag.userId, userInfo.id));
+    // For new tags, we'll need to check if they already exist in the database or create them
+    const newTagNames = tags
+      .filter(tag => !tag.id)
+      .map(tag => tag.name);
 
-  // Then connect existing tags by ID
-  for (const tagId of existingTagIds) {
-    await db
-      .insert(userToTag)
-      .values({
-        userId: userInfo.id,
-        tagId
-      });
-  }
+    // First, delete all existing tag connections
+    await client.query(
+      'DELETE FROM tag_to_user WHERE "userId" = $1',
+      [userInfo.id]
+    );
 
-  // For each new tag name, either find or create the tag and connect it to the user
-  for (const tagName of newTagNames) {
-    // First check if this tag already exists in the database
-    let existingTag = await db.query.tag.findFirst({
-      where: eq(tag.name, tagName)
-    });
-
-    if (!existingTag) {
-      // Find the maximum ID currently in use
-      const maxIdResult = await db.query.tag.findFirst({
-        orderBy: desc(tag.id)
-      });
-
-      const nextId = maxIdResult ? maxIdResult.id + 1 : 1;
-
-      // Create the tag with the new ID
-      [existingTag] = await db
-        .insert(tag)
-        .values({
-          id: nextId,
-          name: tagName
-        })
-        .returning();
+    // Then connect existing tags by ID
+    for (const tagId of existingTagIds) {
+      await client.query(
+        'INSERT INTO tag_to_user ("userId", "tagId") VALUES ($1, $2)',
+        [userInfo.id, tagId]
+      );
     }
 
-    // Connect this tag to the user
-    await db
-      .insert(userToTag)
-      .values({
-        userId: userInfo.id,
-        tagId: existingTag.id
-      });
-  }
+    // For each new tag name, either find or create the tag and connect it to the user
+    for (const tagName of newTagNames) {
+      // First check if this tag already exists in the database
+      let existingTagResult = await client.query(
+        'SELECT * FROM tag WHERE name = $1',
+        [tagName]
+      );
 
-  // Get the updated user with all tags
-  const finalUser = await db.query.user.findFirst({
-    where: eq(user.id, userInfo.id),
-    with: {
-      tags: {
-        with: {
-          tag: true
-        }
+      let tagId;
+      if (existingTagResult.rows.length === 0) {
+        // Find the maximum ID currently in use
+        const maxIdResult = await client.query(
+          'SELECT MAX(id) as max_id FROM tag'
+        );
+
+        const nextId = maxIdResult.rows[0].max_id ? maxIdResult.rows[0].max_id + 1 : 1;
+
+        // Create the tag with the new ID
+        const newTagResult = await client.query(
+          'INSERT INTO tag (id, name) VALUES ($1, $2) RETURNING *',
+          [nextId, tagName]
+        );
+        tagId = newTagResult.rows[0].id;
+      } else {
+        tagId = existingTagResult.rows[0].id;
       }
-    }
-  });
 
-  // Transform the data to match the expected structure
-  return {
-    ...finalUser,
-    tags: finalUser?.tags.map(t => t.tag) || []
-  };
+      // Connect this tag to the user
+      await client.query(
+        'INSERT INTO tag_to_user ("userId", "tagId") VALUES ($1, $2)',
+        [userInfo.id, tagId]
+      );
+    }
+
+    await client.query('COMMIT');
+
+    // Get the updated user with all tags
+    const finalUserResult = await pool.query(
+      'SELECT * FROM "user" WHERE id = $1',
+      [userInfo.id]
+    );
+
+    const userTagsResult = await pool.query(
+      `SELECT t.id, t.name 
+       FROM tag_to_user ttu 
+       JOIN tag t ON ttu."tagId" = t.id 
+       WHERE ttu."userId" = $1`,
+      [userInfo.id]
+    );
+
+    // Transform the data to match the expected structure
+    return {
+      ...finalUserResult.rows[0],
+      tags: userTagsResult.rows
+    };
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
 }
 
 // Optimized pagination function for user created startups
@@ -331,47 +354,87 @@ export async function getUserCreatedStartups(
 
   const userId = userInfo.id;
 
-  // Get startups created by the user
-  const startups = await db.query.startup.findMany({
-    where: eq(startup.creatorUser, userId),
-    limit: pageSize,
-    offset: skip,
-    orderBy: desc(startup.createdAt),
-    with: {
-      tags: {
-        with: {
-          tag: true
-        }
-      },
-      images: {
-        limit: 1
-      },
-      creatorId: true,
-      participants: {
-        with: {
-          user: true
-        },
-        limit: 5
-      }
+  // Get startups created by the user with pagination
+  const startupsResult = await pool.query(
+    `SELECT s.*, 
+            u.id as creator_id, u.name as creator_name, u.username as creator_username, u.image as creator_image,
+            COALESCE(
+              json_agg(DISTINCT jsonb_build_object('id', t.id, 'name', t.name)) 
+              FILTER (WHERE t.id IS NOT NULL), 
+              '[]'::json
+            ) as tags,
+            COALESCE(
+              json_agg(DISTINCT jsonb_build_object('id', i.id, 'url', i.url)) 
+              FILTER (WHERE i.id IS NOT NULL), 
+              '[]'::json
+            ) as images
+     FROM startup s
+     JOIN "user" u ON s."creatorUser" = u.id
+     LEFT JOIN tag_to_startup tts ON s.id = tts."startupId"
+     LEFT JOIN tag t ON tts."tagId" = t.id
+     LEFT JOIN images i ON s.id = i."startupId"
+     WHERE s."creatorUser" = $1
+     GROUP BY s.id, u.id, u.name, u.username, u.image
+     ORDER BY s."createdAt" DESC
+     LIMIT $2 OFFSET $3`,
+    [userId, pageSize, skip]
+  );
+
+  // Get participants for these startups
+  const startupIds = startupsResult.rows.map(s => s.id);
+  let participantsResult: { rows: any[] } = { rows: [] };
+  
+  if (startupIds.length > 0) {
+    participantsResult = await pool.query(
+      `SELECT sp."startupId", u.id, u.name, u.username, u.image
+       FROM startup_participants sp
+       JOIN "user" u ON sp."userId" = u.id
+       WHERE sp."startupId" = ANY($1::text[])
+       ORDER BY sp."startupId", u.name
+       LIMIT 5`,
+      [startupIds]
+    );
+  }
+
+  // Group participants by startup
+  const participantsByStartup: Record<string, any[]> = {};
+  participantsResult.rows.forEach((p: any) => {
+    if (!participantsByStartup[p.startupId]) {
+      participantsByStartup[p.startupId] = [];
+    }
+    if (participantsByStartup[p.startupId].length < 5) {
+      participantsByStartup[p.startupId].push({
+        id: p.id,
+        name: p.name,
+        username: p.username,
+        image: p.image
+      });
     }
   });
 
   // Get the total count of startups for pagination
-  const totalStartupsResult = await db
-    .select({ count: sql<number>`count(*)` })
-    .from(startup)
-    .where(eq(startup.creatorUser, userId));
+  const totalStartupsResult = await pool.query(
+    'SELECT COUNT(*) as count FROM startup WHERE "creatorUser" = $1',
+    [userId]
+  );
 
-  const totalStartups = totalStartupsResult[0]?.count || 0;
+  const totalStartups = parseInt(totalStartupsResult.rows[0].count);
 
   // Calculate total pages
   const totalPages = Math.ceil(totalStartups / pageSize);
 
   // Transform the data to match the expected structure
-  const transformedStartups = startups.map(startup => ({
+  const transformedStartups = startupsResult.rows.map(startup => ({
     ...startup,
-    tags: startup.tags.map(t => t.tag),
-    participants: startup.participants.map(p => p.user)
+    creatorId: {
+      id: startup.creator_id,
+      name: startup.creator_name,
+      username: startup.creator_username,
+      image: startup.creator_image
+    },
+    tags: startup.tags,
+    images: startup.images,
+    participants: participantsByStartup[startup.id] || []
   }));
 
   return {
@@ -403,57 +466,94 @@ export async function getUserParticipatingStartups(
   const userId = userInfo.id;
 
   // Get startups where the user is a participant but NOT the creator
-  const startups = await db.query.startup.findMany({
-    where: and(
-      not(eq(startup.creatorUser, userId)),
-      sql`${startup.id} IN (
-        SELECT ${userToStartup.startupId} 
-        FROM ${userToStartup} 
-        WHERE ${userToStartup.userId} = ${userId}
-      )`
-    ),
-    limit: pageSize,
-    offset: skip,
-    orderBy: desc(startup.createdAt),
-    with: {
-      tags: {
-        with: {
-          tag: true
-        }
-      },
-      images: {
-        limit: 1
-      },
-      creatorId: true,
-      participants: {
-        with: {
-          user: true
-        },
-        limit: 5
-      }
+  const startupsResult = await pool.query(
+    `SELECT s.*, 
+            u.id as creator_id, u.name as creator_name, u.username as creator_username, u.image as creator_image,
+            COALESCE(
+              json_agg(DISTINCT jsonb_build_object('id', t.id, 'name', t.name)) 
+              FILTER (WHERE t.id IS NOT NULL), 
+              '[]'::json
+            ) as tags,
+            COALESCE(
+              json_agg(DISTINCT jsonb_build_object('id', i.id, 'url', i.url)) 
+              FILTER (WHERE i.id IS NOT NULL), 
+              '[]'::json
+            ) as images
+     FROM startup s
+     JOIN "user" u ON s."creatorUser" = u.id
+     LEFT JOIN tag_to_startup tts ON s.id = tts."startupId"
+     LEFT JOIN tag t ON tts."tagId" = t.id
+     LEFT JOIN images i ON s.id = i."startupId"
+     WHERE s."creatorUser" != $1 
+       AND s.id IN (
+         SELECT "startupId" 
+         FROM startup_participants 
+         WHERE "userId" = $1
+       )
+     GROUP BY s.id, u.id, u.name, u.username, u.image
+     ORDER BY s."createdAt" DESC
+     LIMIT $2 OFFSET $3`,
+    [userId, pageSize, skip]
+  );
+
+  // Get participants for these startups
+  const startupIds = startupsResult.rows.map(s => s.id);
+  let participantsResult: { rows: any[] } = { rows: [] };
+  
+  if (startupIds.length > 0) {
+    participantsResult = await pool.query(
+      `SELECT sp."startupId", u.id, u.name, u.username, u.image
+       FROM startup_participants sp
+       JOIN "user" u ON sp."userId" = u.id
+       WHERE sp."startupId" = ANY($1::text[])
+       ORDER BY sp."startupId", u.name
+       LIMIT 5`,
+      [startupIds]
+    );
+  }
+
+  // Group participants by startup
+  const participantsByStartup: Record<string, any[]> = {};
+  participantsResult.rows.forEach((p: any) => {
+    if (!participantsByStartup[p.startupId]) {
+      participantsByStartup[p.startupId] = [];
+    }
+    if (participantsByStartup[p.startupId].length < 5) {
+      participantsByStartup[p.startupId].push({
+        id: p.id,
+        name: p.name,
+        username: p.username,
+        image: p.image
+      });
     }
   });
 
   // Get the total count of startups for pagination
-  const totalStartupsResult = await db
-    .select({ count: sql<number>`count(*)` })
-    .from(userToStartup)
-    .innerJoin(startup, eq(userToStartup.startupId, startup.id))
-    .where(and(
-      eq(userToStartup.userId, userId),
-      not(eq(startup.creatorUser, userId))
-    ));
+  const totalStartupsResult = await pool.query(
+    `SELECT COUNT(*) as count 
+     FROM startup_participants sp
+     JOIN startup s ON sp."startupId" = s.id
+     WHERE sp."userId" = $1 AND s."creatorUser" != $1`,
+    [userId]
+  );
 
-  const totalStartups = totalStartupsResult[0]?.count || 0;
+  const totalStartups = parseInt(totalStartupsResult.rows[0].count);
 
   // Calculate total pages
   const totalPages = Math.ceil(totalStartups / pageSize);
 
   // Transform the data to match the expected structure
-  const transformedStartups = startups.map(startup => ({
+  const transformedStartups = startupsResult.rows.map(startup => ({
     ...startup,
-    tags: startup.tags.map(t => t.tag),
-    participants: startup.participants.map(p => p.user)
+    creatorId: {
+      id: startup.creator_id,
+      name: startup.creator_name,
+      username: startup.creator_username,
+      image: startup.creator_image
+    },
+    tags: startup.tags,
+    images: startup.images,
+    participants: participantsByStartup[startup.id] || []
   }));
 
   return {
@@ -472,93 +572,45 @@ export async function getUserParticipatingStartups(
  * This is used for static site generation
  */
 export async function getMostActiveUsers(limit: number = 10) {
-  // This is a more complex query in Drizzle compared to Prisma
-  // We need to use subqueries to count the relationships
-
-  // First, get the counts for each user
-  const userCounts = await db
-    .select({
-      userId: user.id,
-      createdCount: sql<number>`count(distinct ${startup.id})`.as('created_count'),
-    })
-    .from(user)
-    .leftJoin(startup, eq(user.id, startup.creatorUser))
-    .groupBy(user.id);
-
-  const participatingCounts = await db
-    .select({
-      userId: user.id,
-      participatingCount: sql<number>`count(distinct ${userToStartup.startupId})`.as('participating_count'),
-    })
-    .from(user)
-    .leftJoin(userToStartup, eq(user.id, userToStartup.userId))
-    .groupBy(user.id);
-
-  // Combine the counts
-  const combinedCounts = new Map<string, {
-    userId: string;
-    createdCount: number;
-    participatingCount: number;
-  }>();
-
-  userCounts.forEach(item => {
-    combinedCounts.set(item.userId, {
-      userId: item.userId,
-      createdCount: item.createdCount,
-      participatingCount: 0
-    });
-  });
-
-  participatingCounts.forEach(item => {
-    if (combinedCounts.has(item.userId)) {
-      const existing = combinedCounts.get(item.userId)!;
-      existing.participatingCount = item.participatingCount;
-    } else {
-      combinedCounts.set(item.userId, {
-        userId: item.userId,
-        createdCount: 0,
-        participatingCount: item.participatingCount
-      });
-    }
-  });
-
-  // Sort by counts and take the top users
-  const sortedUserIds = Array.from(combinedCounts.values())
-    .sort((a, b) => {
-      // First sort by created startups
-      if (b.createdCount !== a.createdCount) {
-        return b.createdCount - a.createdCount;
-      }
-      // Then by participating startups
-      return b.participatingCount - a.participatingCount;
-    })
-    .slice(0, limit)
-    .map(item => item.userId);
-
-  // Get the full user data for these IDs
-  const users = await Promise.all(
-    sortedUserIds.map(async (userId) => {
-      const userData = await db.query.user.findFirst({
-        where: eq(user.id, userId),
-        columns: {
-          id: true,
-          name: true,
-          username: true,
-          image: true
-        }
-      });
-
-      const counts = combinedCounts.get(userId)!;
-
-      return {
-        ...userData,
-        _count: {
-          createdStartups: counts.createdCount,
-          participatingStartups: counts.participatingCount
-        }
-      };
-    })
+  // Complex query to get users with their startup counts
+  const result = await pool.query(
+    `WITH user_stats AS (
+      SELECT 
+        u.id,
+        u.name,
+        u.username,
+        u.image,
+        COUNT(DISTINCT s.id) as created_count,
+        COUNT(DISTINCT sp."startupId") as participating_count
+      FROM "user" u
+      LEFT JOIN startup s ON u.id = s."creatorUser"
+      LEFT JOIN startup_participants sp ON u.id = sp."userId"
+      GROUP BY u.id, u.name, u.username, u.image
+    )
+    SELECT 
+      id,
+      name,
+      username,
+      image,
+      created_count,
+      participating_count
+    FROM user_stats
+    ORDER BY created_count DESC, participating_count DESC
+    LIMIT $1`,
+    [limit]
   );
+
+  // Transform the data to match the expected structure
+  const users = result.rows.map(row => ({
+    id: row.id,
+    name: row.name,
+    username: row.username,
+    image: row.image,
+    _count: {
+      createdStartups: parseInt(row.created_count),
+      participatingStartups: parseInt(row.participating_count)
+    }
+  }));
 
   return users;
 }
@@ -571,26 +623,22 @@ export async function updateUserUsername(identifier: string, username: string) {
   }
 
   // Check if the new username is already taken
-  const existingUser = await db.query.user.findFirst({
-    where: eq(user.username, username),
-    columns: { id: true }
-  });
+  const existingUserResult = await pool.query(
+    'SELECT id FROM "user" WHERE username = $1',
+    [username]
+  );
 
-  if (existingUser) {
+  if (existingUserResult.rows.length > 0) {
     throw new Error("Username already taken");
   }
 
   // Update the username
-  const [updatedUser] = await db
-    .update(user)
-    .set({ username })
-    .where(eq(user.id, userInfo.id))
-    .returning({
-      id: user.id,
-      username: user.username
-    });
+  const result = await pool.query(
+    'UPDATE "user" SET username = $1 WHERE id = $2 RETURNING id, username',
+    [username, userInfo.id]
+  );
 
-  return updatedUser;
+  return result.rows[0];
 }
 
 export async function updateUserName(identifier: string, name: string) {
@@ -601,16 +649,12 @@ export async function updateUserName(identifier: string, name: string) {
   }
 
   // Update the name
-  const [updatedUser] = await db
-    .update(user)
-    .set({ name })
-    .where(eq(user.id, userInfo.id))
-    .returning({
-      id: user.id,
-      name: user.name
-    });
+  const result = await pool.query(
+    'UPDATE "user" SET name = $1 WHERE id = $2 RETURNING id, name',
+    [name, userInfo.id]
+  );
 
-  return updatedUser;
+  return result.rows[0];
 }
 
 export async function updateUserImage(identifier: string, imageUrl: string) {
@@ -621,13 +665,10 @@ export async function updateUserImage(identifier: string, imageUrl: string) {
   }
 
   // Update the image URL
-  const [updatedUser] = await db
-    .update(user)
-    .set({ image: imageUrl })
-    .where(eq(user.id, userInfo.id))
-    .returning({
-      id: user.id,
-      image: user.image
-    });
-  return updatedUser;
+  const result = await pool.query(
+    'UPDATE "user" SET image = $1 WHERE id = $2 RETURNING id, image',
+    [imageUrl, userInfo.id]
+  );
+  
+  return result.rows[0];
 }

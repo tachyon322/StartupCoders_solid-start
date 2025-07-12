@@ -108,7 +108,7 @@ export default function StartupLeftCard(props: StartupLeftCardProps) {
                 </CardContent>
                 <CardFooter class="p-4 md:p-6 pt-0 md:pt-0">
                     <div class="text-xs md:text-sm text-gray-500">
-                        Создано {new Date(props.startup!.createdAt).toLocaleDateString()}
+                        Создано {new Date(props.startup!.createdAt + 'Z').toLocaleDateString()}
                     </div>
                 </CardFooter>
             </Show>

@@ -1,5 +1,6 @@
 import { JSX, For, Show, createSignal, createResource, onMount } from "solid-js";
 import RequestCard from "./RequestCard";
+import { getUserRequests, acceptRequest, rejectRequest } from "~/data/startup";
 
 interface RequestsListProps {
   class?: string;
@@ -18,11 +19,7 @@ export default function RequestsList(props: RequestsListProps): JSX.Element {
     async () => {
       if (!isMounted()) return { outgoing: [], incoming: [] };
       try {
-        const response = await fetch('/api/requests');
-        if (!response.ok) {
-          throw new Error('Failed to fetch requests');
-        }
-        return await response.json();
+        return await getUserRequests();
       } catch (error) {
         console.error("Error fetching requests:", error);
         return { outgoing: [], incoming: [] };
@@ -32,18 +29,7 @@ export default function RequestsList(props: RequestsListProps): JSX.Element {
 
   const handleAcceptRequest = async (requestId: string) => {
     try {
-      const response = await fetch('/api/requests/accept', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ requestId }),
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to accept request');
-      }
-
+      await acceptRequest(requestId);
       // Refresh the requests list
       setRefreshTrigger(prev => prev + 1);
     } catch (error) {
@@ -54,18 +40,7 @@ export default function RequestsList(props: RequestsListProps): JSX.Element {
 
   const handleRejectRequest = async (requestId: string) => {
     try {
-      const response = await fetch('/api/requests/reject', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ requestId }),
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to reject request');
-      }
-
+      await rejectRequest(requestId);
       // Refresh the requests list
       setRefreshTrigger(prev => prev + 1);
     } catch (error) {

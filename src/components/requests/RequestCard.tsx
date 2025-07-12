@@ -38,7 +38,9 @@ export default function RequestCard(props: RequestCardProps): JSX.Element {
 
   const timeAgo = () => {
     if (!props.createdAt) return "";
-    const date = typeof props.createdAt === "string" ? new Date(props.createdAt) : props.createdAt;
+    const date = typeof props.createdAt === "string"
+      ? new Date(props.createdAt + 'Z') // Add 'Z' to indicate UTC
+      : props.createdAt;
     return formatDistanceToNow(date, { addSuffix: true, locale: ru });
   };
 

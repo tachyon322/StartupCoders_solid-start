@@ -14,8 +14,9 @@ export default function About() {
         
         <div class="">
           <p class="mb-4">
-            Сайт создан на SolidStart фреймворке с использованием Drizzle, Betterauth. <br />
+            Сайт создан на SolidStart фреймворке с использованием Betterauth, запросы на чистом sql <br />
             Является некоммерческим проектом. <br />
+            <span class="text-red-400">САЙТ В ЛИЦЕ МЕНЯ НЕ НЕСЕТ ОТВЕТСТВЕННОСТИ ЗА ИНФОРМАЦИЮ ЗАГРУЖАЕМУЮ НА САЙТ!</span> <br />
             Мой тикток: <a href="https://www.tiktok.com/@dens30451?_t=ZN-8xCf79Njmg2&_r=1" class="text-blue-500 hover:underline">@dens30451</a> <br />
             Мой телеграм: <a href="https://t.me/QTSJSMA" class="text-blue-500 hover:underline">@QTSJSMA</a> <br />
           </p>

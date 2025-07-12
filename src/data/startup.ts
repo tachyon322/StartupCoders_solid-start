@@ -1,10 +1,13 @@
 "use server";
 import { createSignal, createResource } from "solid-js";
-import db from "../lib/db";
-import * as schema from "../../auth-schema";
-import { eq, and, inArray, like, sql, desc, count } from "drizzle-orm";
+import { Pool } from 'pg';
 import { authClient } from "../lib/auth/auth-client";
 import { invalidateCache } from "../lib/cache";
+
+// Create a pool instance for database connections
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+});
 
 // Type definition for the Tag input
 export interface Tag {
@@ -59,12 +62,11 @@ async function getSession(): Promise<{ user: SessionData['user'] } | null> {
 
 // Get all tags
 export async function getTags() {
-  const tags = await db.select({
-    id: schema.tag.id,
-    name: schema.tag.name
-  }).from(schema.tag);
+  const result = await pool.query(
+    'SELECT id, name FROM tag ORDER BY name ASC'
+  );
   
-  return tags;
+  return result.rows;
 }
 
 // Create a resource factory for startups
@@ -87,49 +89,43 @@ export async function getStartups(
   const skip = (page - 1) * pageSize;
   
   // Build the query with conditional where clause
-  let startups;
+  let query = `
+    SELECT
+      s.id,
+      s.name,
+      s.description,
+      s."createdAt" AT TIME ZONE 'UTC' AS "createdAt",
+      s."updatedAt" AT TIME ZONE 'UTC' AS "updatedAt"
+    FROM startup s
+  `;
+  
+  const queryParams: any[] = [];
+  let paramCount = 0;
   
   if (searchQuery) {
-    startups = await db.select({
-      id: schema.startup.id,
-      name: schema.startup.name,
-      description: schema.startup.description,
-      createdAt: schema.startup.createdAt,
-      updatedAt: schema.startup.updatedAt,
-    })
-    .from(schema.startup)
-    .where(sql`LOWER(${schema.startup.name}) LIKE LOWER(${`%${searchQuery}%`})`)
-    .limit(pageSize)
-    .offset(skip)
-    .orderBy(desc(schema.startup.createdAt));
-  } else {
-    startups = await db.select({
-      id: schema.startup.id,
-      name: schema.startup.name,
-      description: schema.startup.description,
-      createdAt: schema.startup.createdAt,
-      updatedAt: schema.startup.updatedAt,
-    })
-    .from(schema.startup)
-    .limit(pageSize)
-    .offset(skip)
-    .orderBy(desc(schema.startup.createdAt));
+    query += ` WHERE LOWER(s.name) LIKE LOWER($${++paramCount})`;
+    queryParams.push(`%${searchQuery}%`);
   }
+  
+  query += ` ORDER BY s."createdAt" DESC`;
+  query += ` LIMIT $${++paramCount} OFFSET $${++paramCount}`;
+  queryParams.push(pageSize, skip);
+  
+  const startupsResult = await pool.query(query, queryParams);
+  let startups = startupsResult.rows;
 
   // Filter by tags if provided
   if (tagIds && tagIds.length > 0) {
     // Get all startups with these tags
-    const startupsWithTags = await db.select({
-      startupId: schema.startupToTag.startupId
-    })
-    .from(schema.startupToTag)
-    .where(inArray(schema.startupToTag.tagId, tagIds));
+    const startupsWithTagsResult = await pool.query(
+      `SELECT DISTINCT "startupId" 
+       FROM tag_to_startup 
+       WHERE "tagId" = ANY($1::int[])`,
+      [tagIds]
+    );
     
     // Extract the startupIds
-    const startupIdsWithTags: string[] = [];
-    startupsWithTags.forEach(s => {
-      startupIdsWithTags.push(s.startupId);
-    });
+    const startupIdsWithTags = startupsWithTagsResult.rows.map(s => s.startupId);
     
     // Filter startups by the ones that have the required tags
     startups = startups.filter(s => startupIdsWithTags.includes(s.id));
@@ -138,84 +134,69 @@ export async function getStartups(
   // Get related data for each startup
   const startupResults = await Promise.all(startups.map(async (s) => {
     // Get tags for this startup
-    const startupTags = await db
-      .select({
-        id: schema.tag.id,
-        name: schema.tag.name,
-      })
-      .from(schema.tag)
-      .innerJoin(
-        schema.startupToTag, 
-        eq(schema.startupToTag.tagId, schema.tag.id)
-      )
-      .where(eq(schema.startupToTag.startupId, s.id));
+    const startupTagsResult = await pool.query(
+      `SELECT t.id, t.name
+       FROM tag t
+       INNER JOIN tag_to_startup tts ON tts."tagId" = t.id
+       WHERE tts."startupId" = $1`,
+      [s.id]
+    );
 
     // Get images for this startup
-    const startupImages = await db
-      .select({
-        id: schema.images.id,
-        url: schema.images.url,
-      })
-      .from(schema.images)
-      .where(eq(schema.images.startupId, s.id));
+    const startupImagesResult = await pool.query(
+      `SELECT id, url
+       FROM images
+       WHERE "startupId" = $1`,
+      [s.id]
+    );
 
     // Get creator info
-    const creator = await db
-      .select({
-        id: schema.user.id,
-        name: schema.user.name,
-        username: schema.user.username,
-        image: schema.user.image,
-      })
-      .from(schema.user)
-      .where(eq(schema.user.id, s.id))
-      .limit(1);
+    const creatorResult = await pool.query(
+      `SELECT u.id, u.name, u.username, u.image
+       FROM "user" u
+       INNER JOIN startup s ON s."creatorUser" = u.id
+       WHERE s.id = $1
+       LIMIT 1`,
+      [s.id]
+    );
 
     // Get participants
-    const participants = await db
-      .select({
-        id: schema.user.id,
-        name: schema.user.name,
-        username: schema.user.username,
-        image: schema.user.image,
-      })
-      .from(schema.user)
-      .innerJoin(
-        schema.userToStartup, 
-        eq(schema.userToStartup.userId, schema.user.id)
-      )
-      .where(eq(schema.userToStartup.startupId, s.id));
+    const participantsResult = await pool.query(
+      `SELECT u.id, u.name, u.username, u.image
+       FROM "user" u
+       INNER JOIN startup_participants sp ON sp."userId" = u.id
+       WHERE sp."startupId" = $1`,
+      [s.id]
+    );
 
     return {
       ...s,
-      tags: startupTags,
-      images: startupImages,
-      creatorId: creator[0] || null,
-      participants,
+      tags: startupTagsResult.rows,
+      images: startupImagesResult.rows,
+      creatorId: creatorResult.rows[0] || null,
+      participants: participantsResult.rows,
     };
   }));
 
   // Count total startups for pagination with the same filters
-  let totalResults;
+  let countQuery = 'SELECT COUNT(*) as count FROM startup';
+  const countParams: any[] = [];
   
   if (searchQuery) {
-    totalResults = await db.select({ value: count() })
-      .from(schema.startup)
-      .where(sql`LOWER(${schema.startup.name}) LIKE LOWER(${`%${searchQuery}%`})`);
-  } else {
-    totalResults = await db.select({ value: count() })
-      .from(schema.startup);
+    countQuery += ' WHERE LOWER(name) LIKE LOWER($1)';
+    countParams.push(`%${searchQuery}%`);
   }
   
-  const totalStartups = totalResults[0]?.value || 0;
+  const totalResult = await pool.query(countQuery, countParams);
+  const totalStartups = parseInt(totalResult.rows[0].count);
   
   // Calculate total pages
-  const totalPages = Math.ceil(Number(totalStartups) / pageSize);
+  const totalPages = Math.ceil(totalStartups / pageSize);
 
   return {
     startups: startupResults,
     pagination: {
-      totalItems: Number(totalStartups),
+      totalItems: totalStartups,
       totalPages,
       currentPage: page,
       pageSize
@@ -236,184 +217,173 @@ export async function createStartup(
   }
 
   const userId = session.data.user.id;
+  const client = await pool.connect();
 
-  // Optimize tag handling - split into existing and new tags
-  const existingTags = tags.filter(t => t.id).map(t => ({ id: t.id as number }));
-  const newTagNames = Array.from(new Set(tags.filter(t => !t.id).map(t => t.name)));
-  
-  let allTagConnections = [...existingTags];
-  
-  if (newTagNames.length > 0) {
-    // Check which of the new tag names already exist in the database
-    const existingTagsByName = await db
-      .select({
-        id: schema.tag.id,
-        name: schema.tag.name,
-      })
-      .from(schema.tag)
-      .where(inArray(schema.tag.name, newTagNames));
+  try {
+    await client.query('BEGIN');
+
+    // Optimize tag handling - split into existing and new tags
+    const existingTags = tags.filter(t => t.id).map(t => ({ id: t.id as number }));
+    const newTagNames = Array.from(new Set(tags.filter(t => !t.id).map(t => t.name)));
     
-    // Add existing tags found by name to connections
-    const existingTagNameSet = new Set(existingTagsByName.map(t => t.name));
-    allTagConnections.push(...existingTagsByName.map(t => ({ id: t.id })));
+    let allTagConnections = [...existingTags];
     
-    // Create truly new tags
-    const trulyNewTagNames = newTagNames.filter(name => !existingTagNameSet.has(name));
-    
-    if (trulyNewTagNames.length > 0) {
-      // Get the highest tag ID for creating new sequential IDs
-      const highestIdResult = await db
-        .select({ id: schema.tag.id })
-        .from(schema.tag)
-        .orderBy(desc(schema.tag.id))
-        .limit(1);
+    if (newTagNames.length > 0) {
+      // Check which of the new tag names already exist in the database
+      const existingTagsByNameResult = await client.query(
+        'SELECT id, name FROM tag WHERE name = ANY($1::text[])',
+        [newTagNames]
+      );
       
-      let nextId = highestIdResult[0] ? highestIdResult[0].id + 1 : 1;
+      // Add existing tags found by name to connections
+      const existingTagNameSet = new Set(existingTagsByNameResult.rows.map(t => t.name));
+      allTagConnections.push(...existingTagsByNameResult.rows.map(t => ({ id: t.id })));
       
-      // Create new tags
-      for (const name of trulyNewTagNames) {
-        const tagId = nextId++;
-        const newTag = await db.insert(schema.tag).values({
-          id: tagId,
-          name
-        }).returning({ id: schema.tag.id });
+      // Create truly new tags
+      const trulyNewTagNames = newTagNames.filter(name => !existingTagNameSet.has(name));
+      
+      if (trulyNewTagNames.length > 0) {
+        // Get the highest tag ID for creating new sequential IDs
+        const highestIdResult = await client.query(
+          'SELECT MAX(id) as max_id FROM tag'
+        );
         
-        allTagConnections.push({ id: newTag[0].id });
+        let nextId = highestIdResult.rows[0].max_id ? highestIdResult.rows[0].max_id + 1 : 1;
+        
+        // Create new tags
+        for (const tagName of trulyNewTagNames) {
+          const tagId = nextId++;
+          const newTagResult = await client.query(
+            'INSERT INTO tag (id, name) VALUES ($1, $2) RETURNING id',
+            [tagId, tagName]
+          );
+          
+          allTagConnections.push({ id: newTagResult.rows[0].id });
+        }
       }
     }
-  }
-  
-  // Create the startup
-  const [newStartup] = await db.insert(schema.startup).values({
-    name,
-    description,
-    creatorUser: userId,
-    updatedAt: new Date(new Date().toISOString()), // Ensures UTC time
-  }).returning();
-  
-  if (!newStartup) throw new Error("Failed to create startup");
-  
-  // Connect tags
-  if (allTagConnections.length > 0) {
-    await Promise.all(allTagConnections.map(tagConnection =>
-      db.insert(schema.startupToTag).values({
-        startupId: newStartup.id,
-        tagId: tagConnection.id
-      })
-    ));
-  }
-  
-  // Connect creator as a participant
-  await db.insert(schema.userToStartup).values({
-    userId: userId,
-    startupId: newStartup.id
-  });
-  
-  // Add images
-  if (uploadedImages.length > 0) {
-    for (const image of uploadedImages) {
-      await db.insert(schema.images).values({
-        url: image.url,
-        startupId: newStartup.id
-      });
+    
+    // Create the startup
+    const newStartupResult = await client.query(
+      `INSERT INTO startup (name, description, "creatorUser", "createdAt", "updatedAt")
+       VALUES ($1, $2, $3, NOW(), NOW())
+       RETURNING *`,
+      [name, description, userId]
+    );
+    
+    const newStartup = newStartupResult.rows[0];
+    if (!newStartup) throw new Error("Failed to create startup");
+    
+    // Connect tags
+    if (allTagConnections.length > 0) {
+      for (const tagConnection of allTagConnections) {
+        await client.query(
+          'INSERT INTO tag_to_startup ("startupId", "tagId") VALUES ($1, $2)',
+          [newStartup.id, tagConnection.id]
+        );
+      }
     }
+    
+    // Connect creator as a participant
+    await client.query(
+      'INSERT INTO startup_participants ("userId", "startupId") VALUES ($1, $2)',
+      [userId, newStartup.id]
+    );
+    
+    // Add images
+    if (uploadedImages.length > 0) {
+      for (const image of uploadedImages) {
+        await client.query(
+          'INSERT INTO images (url, "startupId") VALUES ($1, $2)',
+          [image.url, newStartup.id]
+        );
+      }
+    }
+
+    await client.query('COMMIT');
+    
+    // Get the complete startup data to return
+    const startupWithRelations = await getStartupById(newStartup.id);
+    
+    // Invalidate cache after creating a new startup
+    // This will clear all startup lists and tags cache
+    invalidateCache.startupLists();
+    invalidateCache.tags();
+    
+    return startupWithRelations;
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
   }
-  
-  // Get the complete startup data to return
-  const startupWithRelations = await getStartupById(newStartup.id);
-  
-  // Invalidate cache after creating a new startup
-  // This will clear all startup lists and tags cache
-  invalidateCache.startupLists();
-  invalidateCache.tags();
-  
-  return startupWithRelations;
 }
 
 // Get startup by ID
 export async function getStartupById(startupId: string) {
-  const startupData = await db
-    .select({
-      id: schema.startup.id,
-      name: schema.startup.name,
-      description: schema.startup.description,
-      createdAt: schema.startup.createdAt,
-      creatorUser: schema.startup.creatorUser,
-    })
-    .from(schema.startup)
-    .where(eq(schema.startup.id, startupId))
-    .limit(1);
+  const startupResult = await pool.query(
+    `SELECT id, name, description, "createdAt" AT TIME ZONE 'UTC' AS "createdAt", "creatorUser"
+     FROM startup
+     WHERE id = $1
+     LIMIT 1`,
+    [startupId]
+  );
 
-  if (!startupData.length) {
+  if (!startupResult.rows.length) {
     return null;
   }
 
-  const foundStartup = startupData[0];
+  const foundStartup = startupResult.rows[0];
 
   // Get related data
   const [
-    startupTags,
-    startupImages,
-    creator,
-    participants
+    startupTagsResult,
+    startupImagesResult,
+    creatorResult,
+    participantsResult
   ] = await Promise.all([
     // Get tags
-    db
-      .select({
-        id: schema.tag.id,
-        name: schema.tag.name,
-      })
-      .from(schema.tag)
-      .innerJoin(
-        schema.startupToTag, 
-        eq(schema.startupToTag.tagId, schema.tag.id)
-      )
-      .where(eq(schema.startupToTag.startupId, startupId)),
+    pool.query(
+      `SELECT t.id, t.name
+       FROM tag t
+       INNER JOIN tag_to_startup tts ON tts."tagId" = t.id
+       WHERE tts."startupId" = $1`,
+      [startupId]
+    ),
     
     // Get images
-    db
-      .select({
-        id: schema.images.id,
-        url: schema.images.url,
-      })
-      .from(schema.images)
-      .where(eq(schema.images.startupId, startupId)),
+    pool.query(
+      `SELECT id, url
+       FROM images
+       WHERE "startupId" = $1`,
+      [startupId]
+    ),
     
     // Get creator details
-    db
-      .select({
-        id: schema.user.id,
-        name: schema.user.name,
-        username: schema.user.username,
-        image: schema.user.image,
-        description: schema.user.description,
-      })
-      .from(schema.user)
-      .where(eq(schema.user.id, foundStartup.creatorUser))
-      .limit(1),
+    pool.query(
+      `SELECT id, name, username, image, description
+       FROM "user"
+       WHERE id = $1
+       LIMIT 1`,
+      [foundStartup.creatorUser]
+    ),
     
     // Get participants
-    db
-      .select({
-        id: schema.user.id,
-        name: schema.user.name,
-        username: schema.user.username,
-        image: schema.user.image,
-      })
-      .from(schema.user)
-      .innerJoin(
-        schema.userToStartup, 
-        eq(schema.userToStartup.userId, schema.user.id)
-      )
-      .where(eq(schema.userToStartup.startupId, startupId)),
+    pool.query(
+      `SELECT u.id, u.name, u.username, u.image
+       FROM "user" u
+       INNER JOIN startup_participants sp ON sp."userId" = u.id
+       WHERE sp."startupId" = $1`,
+      [startupId]
+    ),
   ]);
 
   return {
     ...foundStartup,
-    tags: startupTags,
-    images: startupImages,
-    creatorId: creator[0] || null,
-    participants,
+    tags: startupTagsResult.rows,
+    images: startupImagesResult.rows,
+    creatorId: creatorResult.rows[0] || null,
+    participants: participantsResult.rows,
   };
 }
 
@@ -426,84 +396,83 @@ export async function requestToParticipate(startupId: string, message: string, s
   }
 
   const userId = userData.id;
+  const client = await pool.connect();
 
-  // Check if startup exists
-  const startupExists = await db
-    .select({ id: schema.startup.id })
-    .from(schema.startup)
-    .where(eq(schema.startup.id, startupId))
-    .limit(1);
+  try {
+    await client.query('BEGIN');
 
-  if (!startupExists.length) {
-    throw new Error("Startup not found");
-  }
-
-  // Check if user is already a participant
-  const existingParticipation = await db
-    .select({ userId: schema.userToStartup.userId })
-    .from(schema.userToStartup)
-    .where(
-      and(
-        eq(schema.userToStartup.startupId, startupId),
-        eq(schema.userToStartup.userId, userId)
-      )
-    )
-    .limit(1);
-
-  if (existingParticipation.length > 0) {
-    throw new Error("You are already a participant");
-  }
-
-  // Check if user already has a pending request
-  const existingRequests = await db
-    .select({ 
-      requestId: schema.startupRequest.id 
-    })
-    .from(schema.startupRequest)
-    .innerJoin(
-      schema.userToStartupRequest,
-      eq(schema.userToStartupRequest.startupRequestId, schema.startupRequest.id)
-    )
-    .innerJoin(
-      schema.startupToStartupRequest,
-      eq(schema.startupToStartupRequest.startupRequestId, schema.startupRequest.id)
-    )
-    .where(
-      and(
-        eq(schema.startupToStartupRequest.startupId, startupId),
-        eq(schema.userToStartupRequest.userId, userId)
-      )
+    // Check if startup exists
+    const startupExistsResult = await client.query(
+      'SELECT id FROM startup WHERE id = $1 LIMIT 1',
+      [startupId]
     );
 
-  if (existingRequests.length > 0) {
-    throw new Error("You already have a pending request");
+    if (!startupExistsResult.rows.length) {
+      throw new Error("Startup not found");
+    }
+
+    // Check if user is already a participant
+    const existingParticipationResult = await client.query(
+      `SELECT "userId" FROM startup_participants 
+       WHERE "startupId" = $1 AND "userId" = $2 
+       LIMIT 1`,
+      [startupId, userId]
+    );
+
+    if (existingParticipationResult.rows.length > 0) {
+      throw new Error("You are already a participant");
+    }
+
+    // Check if user already has a pending request
+    const existingRequestsResult = await client.query(
+      `SELECT sr.id 
+       FROM startup_request sr
+       INNER JOIN startup_request_users sru ON sru."startupRequestId" = sr.id
+       INNER JOIN startup_request_startups srs ON srs."startupRequestId" = sr.id
+       WHERE srs."startupId" = $1 AND sru."userId" = $2`,
+      [startupId, userId]
+    );
+
+    if (existingRequestsResult.rows.length > 0) {
+      throw new Error("You already have a pending request");
+    }
+
+    // Create new request
+    const newRequestResult = await client.query(
+      `INSERT INTO startup_request (message, "createdAt", "updatedAt")
+       VALUES ($1, NOW(), NOW())
+       RETURNING *`,
+      [message]
+    );
+    
+    const newRequest = newRequestResult.rows[0];
+    if (!newRequest) throw new Error("Failed to create request");
+
+    // Connect request to user and startup
+    await Promise.all([
+      client.query(
+        'INSERT INTO startup_request_users ("userId", "startupRequestId") VALUES ($1, $2)',
+        [userId, newRequest.id]
+      ),
+      client.query(
+        'INSERT INTO startup_request_startups ("startupId", "startupRequestId") VALUES ($1, $2)',
+        [startupId, newRequest.id]
+      ),
+      // Update the startup with the reference to the request
+      client.query(
+        'UPDATE startup SET "startupRequestId" = $1 WHERE id = $2',
+        [newRequest.id, startupId]
+      )
+    ]);
+
+    await client.query('COMMIT');
+    return newRequest;
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
   }
-
-  // Create new request
-  const [newRequest] = await db.insert(schema.startupRequest).values({
-    message,
-    updatedAt: new Date(new Date().toISOString()), // Ensures UTC time
-  }).returning();
-  
-  if (!newRequest) throw new Error("Failed to create request");
-
-  // Connect request to user and startup
-  await Promise.all([
-    db.insert(schema.userToStartupRequest).values({
-      userId: userId,
-      startupRequestId: newRequest.id,
-    }),
-    db.insert(schema.startupToStartupRequest).values({
-      startupId,
-      startupRequestId: newRequest.id,
-    }),
-    // Update the startup with the reference to the request
-    db.update(schema.startup)
-      .set({ startupRequestId: newRequest.id })
-      .where(eq(schema.startup.id, startupId))
-  ]);
-
-  return newRequest;
 }
 
 // Check if user has requested access
@@ -517,27 +486,16 @@ export async function hasRequestedAccess(session: any, startupId: string) {
 
   try {
     // Check if user has a pending request for this startup
-    const existingRequests = await db
-      .select({
-        requestId: schema.startupRequest.id
-      })
-      .from(schema.startupRequest)
-      .innerJoin(
-        schema.userToStartupRequest,
-        eq(schema.userToStartupRequest.startupRequestId, schema.startupRequest.id)
-      )
-      .innerJoin(
-        schema.startupToStartupRequest,
-        eq(schema.startupToStartupRequest.startupRequestId, schema.startupRequest.id)
-      )
-      .where(
-        and(
-          eq(schema.startupToStartupRequest.startupId, startupId),
-          eq(schema.userToStartupRequest.userId, userData.id)
-        )
-      );
+    const existingRequestsResult = await pool.query(
+      `SELECT sr.id
+       FROM startup_request sr
+       INNER JOIN startup_request_users sru ON sru."startupRequestId" = sr.id
+       INNER JOIN startup_request_startups srs ON srs."startupRequestId" = sr.id
+       WHERE srs."startupId" = $1 AND sru."userId" = $2`,
+      [startupId, userData.id]
+    );
 
-    return existingRequests.length > 0;
+    return existingRequestsResult.rows.length > 0;
   } catch (error) {
     console.error("Error checking requested access:", error);
     return false;
@@ -553,83 +511,63 @@ export async function getUserRequests() {
   }
 
   // Get all requests where the user is one of the requesters
-  const outgoingRequests = await db
-    .select({
-      id: schema.startupRequest.id,
-      message: schema.startupRequest.message,
-      createdAt: schema.startupRequest.createdAt,
-    })
-    .from(schema.startupRequest)
-    .innerJoin(
-      schema.userToStartupRequest,
-      eq(schema.userToStartupRequest.startupRequestId, schema.startupRequest.id)
-    )
-    .where(eq(schema.userToStartupRequest.userId, session.user.id));
+  const outgoingRequestsResult = await pool.query(
+    `SELECT sr.id, sr.message, sr."createdAt" AT TIME ZONE 'UTC' AS "createdAt"
+     FROM startup_request sr
+     INNER JOIN startup_request_users sru ON sru."startupRequestId" = sr.id
+     WHERE sru."userId" = $1`,
+    [session.user.id]
+  );
 
   // Enhance outgoing requests with startup data
   const outgoingWithStartups = await Promise.all(
-    outgoingRequests.map(async (request) => {
+    outgoingRequestsResult.rows.map(async (request) => {
       // Get startup for this request
-      const startupData = await db
-        .select({
-          id: schema.startup.id,
-          name: schema.startup.name,
-        })
-        .from(schema.startup)
-        .innerJoin(
-          schema.startupToStartupRequest,
-          eq(schema.startupToStartupRequest.startupId, schema.startup.id)
-        )
-        .where(eq(schema.startupToStartupRequest.startupRequestId, request.id))
-        .limit(1);
+      const startupDataResult = await pool.query(
+        `SELECT s.id, s.name
+         FROM startup s
+         INNER JOIN startup_request_startups srs ON srs."startupId" = s.id
+         WHERE srs."startupRequestId" = $1
+         LIMIT 1`,
+        [request.id]
+      );
 
-      if (!startupData.length) return null;
+      if (!startupDataResult.rows.length) return null;
 
       // Get tags and images for this startup
-      const [startupTags, startupImages, creatorInfo] = await Promise.all([
-        db
-          .select({
-            id: schema.tag.id,
-            name: schema.tag.name,
-          })
-          .from(schema.tag)
-          .innerJoin(
-            schema.startupToTag, 
-            eq(schema.startupToTag.tagId, schema.tag.id)
-          )
-          .where(eq(schema.startupToTag.startupId, startupData[0].id)),
+      const [startupTagsResult, startupImagesResult, creatorInfoResult] = await Promise.all([
+        pool.query(
+          `SELECT t.id, t.name
+           FROM tag t
+           INNER JOIN tag_to_startup tts ON tts."tagId" = t.id
+           WHERE tts."startupId" = $1`,
+          [startupDataResult.rows[0].id]
+        ),
         
-        db
-          .select({
-            id: schema.images.id,
-            url: schema.images.url,
-          })
-          .from(schema.images)
-          .where(eq(schema.images.startupId, startupData[0].id)),
+        pool.query(
+          `SELECT id, url
+           FROM images
+           WHERE "startupId" = $1`,
+          [startupDataResult.rows[0].id]
+        ),
           
-        db
-          .select({
-            id: schema.user.id,
-            name: schema.user.name,
-            username: schema.user.username,
-            image: schema.user.image,
-          })
-          .from(schema.user)
-          .innerJoin(
-            schema.startup, 
-            eq(schema.startup.creatorUser, schema.user.id)
-          )
-          .where(eq(schema.startup.id, startupData[0].id))
-          .limit(1),
+        pool.query(
+          `SELECT u.id, u.name, u.username, u.image
+           FROM "user" u
+           INNER JOIN startup s ON s."creatorUser" = u.id
+           WHERE s.id = $1
+           LIMIT 1`,
+          [startupDataResult.rows[0].id]
+        ),
       ]);
 
       return {
         ...request,
         startup: {
-          ...startupData[0],
-          tags: startupTags,
-          images: startupImages,
-          creatorId: creatorInfo[0] || null,
+          ...startupDataResult.rows[0],
+          tags: startupTagsResult.rows,
+          images: startupImagesResult.rows,
+          creatorId: creatorInfoResult.rows[0] || null,
         }
       };
     })
@@ -639,81 +577,66 @@ export async function getUserRequests() {
   const validOutgoingRequests = outgoingWithStartups.filter(Boolean);
 
   // Get all startups created by the user with their requests
-  const createdStartups = await db
-    .select({
-      id: schema.startup.id,
-      name: schema.startup.name,
-      startupRequestId: schema.startup.startupRequestId,
-    })
-    .from(schema.startup)
-    .where(eq(schema.startup.creatorUser, session.user.id));
+  const createdStartupsResult = await pool.query(
+    `SELECT id, name, "startupRequestId"
+     FROM startup
+     WHERE "creatorUser" = $1`,
+    [session.user.id]
+  );
 
   // Process incoming requests
   const incomingRequests = await Promise.all(
-    createdStartups
+    createdStartupsResult.rows
       .filter(s => s.startupRequestId !== null)
       .map(async (s) => {
         if (!s.startupRequestId) return null;
         
         // Get request details
-        const requestData = await db
-          .select({
-            id: schema.startupRequest.id,
-            message: schema.startupRequest.message,
-            createdAt: schema.startupRequest.createdAt,
-          })
-          .from(schema.startupRequest)
-          .where(eq(schema.startupRequest.id, s.startupRequestId))
-          .limit(1);
+        const requestDataResult = await pool.query(
+          `SELECT id, message, "createdAt" AT TIME ZONE 'UTC' AS "createdAt"
+           FROM startup_request
+           WHERE id = $1
+           LIMIT 1`,
+          [s.startupRequestId]
+        );
 
-        if (!requestData.length) return null;
+        if (!requestDataResult.rows.length) return null;
 
         // Get requesting users
-        const requestingUsers = await db
-          .select({
-            id: schema.user.id,
-            name: schema.user.name,
-            username: schema.user.username,
-            image: schema.user.image,
-          })
-          .from(schema.user)
-          .innerJoin(
-            schema.userToStartupRequest, 
-            eq(schema.userToStartupRequest.userId, schema.user.id)
-          )
-          .where(eq(schema.userToStartupRequest.startupRequestId, s.startupRequestId));
+        const requestingUsersResult = await pool.query(
+          `SELECT u.id, u.name, u.username, u.image
+           FROM "user" u
+           INNER JOIN startup_request_users sru ON sru."userId" = u.id
+           WHERE sru."startupRequestId" = $1`,
+          [s.startupRequestId]
+        );
 
         // Get tags and images for this startup
-        const [startupTags, startupImages] = await Promise.all([
-          db
-            .select({
-              id: schema.tag.id,
-              name: schema.tag.name,
-            })
-            .from(schema.tag)
-            .innerJoin(
-              schema.startupToTag, 
-              eq(schema.startupToTag.tagId, schema.tag.id)
-            )
-            .where(eq(schema.startupToTag.startupId, s.id)),
+        const [startupTagsResult, startupImagesResult] = await Promise.all([
+          pool.query(
+            `SELECT t.id, t.name
+             FROM tag t
+             INNER JOIN tag_to_startup tts ON tts."tagId" = t.id
+             WHERE tts."startupId" = $1`,
+            [s.id]
+          ),
           
-          db
-            .select({
-              id: schema.images.id,
-              url: schema.images.url,
-            })
-            .from(schema.images)
-            .where(eq(schema.images.startupId, s.id)),
+          pool.query(
+            `SELECT id, url
+             FROM images
+             WHERE "startupId" = $1`,
+            [s.id]
+          ),
         ]);
 
         return {
-          ...requestData[0],
-          requestBy: requestingUsers,
+          ...requestDataResult.rows[0],
+          requestBy: requestingUsersResult.rows,
           startup: {
             id: s.id,
             name: s.name,
-            tags: startupTags,
-            images: startupImages,
+            tags: startupTagsResult.rows,
+            images: startupImagesResult.rows,
           }
         };
       })
@@ -741,91 +664,104 @@ export async function acceptRequest(requestId: string) {
     throw new Error("Invalid request ID");
   }
 
-  // Get the request with related startup
-  const request = await db
-    .select({
-      id: schema.startupRequest.id,
-    })
-    .from(schema.startupRequest)
-    .where(eq(schema.startupRequest.id, requestIdNum))
-    .limit(1);
+  const client = await pool.connect();
 
-  if (!request.length) {
-    throw new Error("Request not found");
+  try {
+    await client.query('BEGIN');
+
+    // Get the request with related startup
+    const requestResult = await client.query(
+      'SELECT id FROM startup_request WHERE id = $1 LIMIT 1',
+      [requestIdNum]
+    );
+
+    if (!requestResult.rows.length) {
+      throw new Error("Request not found");
+    }
+
+    // Find startup associated with this request
+    const startupDataResult = await client.query(
+      `SELECT s.id, s."creatorUser"
+       FROM startup s
+       INNER JOIN startup_request_startups srs ON srs."startupId" = s.id
+       WHERE srs."startupRequestId" = $1
+       LIMIT 1`,
+      [requestIdNum]
+    );
+
+    if (!startupDataResult.rows.length) {
+      throw new Error("No startup associated with this request");
+    }
+
+    const foundStartup = startupDataResult.rows[0];
+    
+    // Verify that the current user is the startup creator
+    if (foundStartup.creatorUser !== session.user.id) {
+      throw new Error("Only the startup creator can accept requests");
+    }
+
+    // Get requesters from this request
+    const requestersResult = await client.query(
+      `SELECT "userId"
+       FROM startup_request_users
+       WHERE "startupRequestId" = $1`,
+      [requestIdNum]
+    );
+
+    // Add all requesters to the startup participants
+    if (requestersResult.rows.length > 0) {
+      for (const requester of requestersResult.rows) {
+        await client.query(
+          'INSERT INTO startup_participants ("userId", "startupId") VALUES ($1, $2)',
+          [requester.userId, foundStartup.id]
+        );
+      }
+    }
+
+    // Delete request connections
+    await Promise.all([
+      client.query(
+        'DELETE FROM startup_request_users WHERE "startupRequestId" = $1',
+        [requestIdNum]
+      ),
+      client.query(
+        'DELETE FROM startup_request_startups WHERE "startupRequestId" = $1',
+        [requestIdNum]
+      ),
+    ]);
+
+    // Delete the request
+    await client.query(
+      'DELETE FROM startup_request WHERE id = $1',
+      [requestIdNum]
+    );
+    
+    // Update the startup to remove the request reference
+    await client.query(
+      'UPDATE startup SET "startupRequestId" = NULL WHERE id = $1',
+      [foundStartup.id]
+    );
+
+    await client.query('COMMIT');
+
+    // Invalidate cache after accepting request (participants changed)
+    invalidateCache.startupRelated(foundStartup.id);
+    invalidateCache.userProfile(session.user.id);
+    
+    // Also invalidate profiles of new participants
+    if (requestersResult.rows.length > 0) {
+      requestersResult.rows.forEach(requester => {
+        invalidateCache.userProfile(requester.userId);
+      });
+    }
+
+    return true;
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
   }
-
-  // Find startup associated with this request
-  const startupData = await db
-    .select({
-      id: schema.startup.id,
-      creatorUser: schema.startup.creatorUser,
-    })
-    .from(schema.startup)
-    .innerJoin(
-      schema.startupToStartupRequest,
-      eq(schema.startupToStartupRequest.startupId, schema.startup.id)
-    )
-    .where(eq(schema.startupToStartupRequest.startupRequestId, requestIdNum))
-    .limit(1);
-
-  if (!startupData.length) {
-    throw new Error("No startup associated with this request");
-  }
-
-  const foundStartup = startupData[0];
-  
-  // Verify that the current user is the startup creator
-  if (foundStartup.creatorUser !== session.user.id) {
-    throw new Error("Only the startup creator can accept requests");
-  }
-
-  // Get requesters from this request
-  const requesters = await db
-    .select({
-      userId: schema.userToStartupRequest.userId,
-    })
-    .from(schema.userToStartupRequest)
-    .where(eq(schema.userToStartupRequest.startupRequestId, requestIdNum));
-
-  // Add all requesters to the startup participants
-  if (requesters.length > 0) {
-    await Promise.all(requesters.map(requester => 
-      db.insert(schema.userToStartup).values({
-        userId: requester.userId,
-        startupId: foundStartup.id,
-      })
-    ));
-  }
-
-  // Delete request connections
-  await Promise.all([
-    db.delete(schema.userToStartupRequest)
-      .where(eq(schema.userToStartupRequest.startupRequestId, requestIdNum)),
-    db.delete(schema.startupToStartupRequest)
-      .where(eq(schema.startupToStartupRequest.startupRequestId, requestIdNum)),
-  ]);
-
-  // Delete the request
-  await db.delete(schema.startupRequest)
-    .where(eq(schema.startupRequest.id, requestIdNum));
-  
-  // Update the startup to remove the request reference
-  await db.update(schema.startup)
-    .set({ startupRequestId: null })
-    .where(eq(schema.startup.id, foundStartup.id));
-
-  // Invalidate cache after accepting request (participants changed)
-  invalidateCache.startupRelated(foundStartup.id);
-  invalidateCache.userProfile(session.user.id);
-  
-  // Also invalidate profiles of new participants
-  if (requesters.length > 0) {
-    requesters.forEach(requester => {
-      invalidateCache.userProfile(requester.userId);
-    });
-  }
-
-  return true;
 }
 
 export async function rejectRequest(requestId: string) {
@@ -841,65 +777,78 @@ export async function rejectRequest(requestId: string) {
     throw new Error("Invalid request ID");
   }
 
-  // Get the request with related startup
-  const request = await db
-    .select({
-      id: schema.startupRequest.id,
-    })
-    .from(schema.startupRequest)
-    .where(eq(schema.startupRequest.id, requestIdNum))
-    .limit(1);
+  const client = await pool.connect();
 
-  if (!request.length) {
-    throw new Error("Request not found");
+  try {
+    await client.query('BEGIN');
+
+    // Get the request with related startup
+    const requestResult = await client.query(
+      'SELECT id FROM startup_request WHERE id = $1 LIMIT 1',
+      [requestIdNum]
+    );
+
+    if (!requestResult.rows.length) {
+      throw new Error("Request not found");
+    }
+
+    // Find startup associated with this request
+    const startupDataResult = await client.query(
+      `SELECT s.id, s."creatorUser"
+       FROM startup s
+       INNER JOIN startup_request_startups srs ON srs."startupId" = s.id
+       WHERE srs."startupRequestId" = $1
+       LIMIT 1`,
+      [requestIdNum]
+    );
+
+    if (!startupDataResult.rows.length) {
+      throw new Error("No startup associated with this request");
+    }
+
+    const foundStartup = startupDataResult.rows[0];
+    
+    // Verify that the current user is the startup creator
+    if (foundStartup.creatorUser !== session.user.id) {
+      throw new Error("Only the startup creator can reject requests");
+    }
+
+    // Delete request connections
+    await Promise.all([
+      client.query(
+        'DELETE FROM startup_request_users WHERE "startupRequestId" = $1',
+        [requestIdNum]
+      ),
+      client.query(
+        'DELETE FROM startup_request_startups WHERE "startupRequestId" = $1',
+        [requestIdNum]
+      ),
+    ]);
+
+    // Delete the request
+    await client.query(
+      'DELETE FROM startup_request WHERE id = $1',
+      [requestIdNum]
+    );
+    
+    // Update the startup to remove the request reference
+    await client.query(
+      'UPDATE startup SET "startupRequestId" = NULL WHERE id = $1',
+      [foundStartup.id]
+    );
+
+    await client.query('COMMIT');
+
+    // Invalidate cache after rejecting request
+    invalidateCache.startupRelated(foundStartup.id);
+
+    return true;
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
   }
-
-  // Find startup associated with this request
-  const startupData = await db
-    .select({
-      id: schema.startup.id,
-      creatorUser: schema.startup.creatorUser,
-    })
-    .from(schema.startup)
-    .innerJoin(
-      schema.startupToStartupRequest,
-      eq(schema.startupToStartupRequest.startupId, schema.startup.id)
-    )
-    .where(eq(schema.startupToStartupRequest.startupRequestId, requestIdNum))
-    .limit(1);
-
-  if (!startupData.length) {
-    throw new Error("No startup associated with this request");
-  }
-
-  const foundStartup = startupData[0];
-  
-  // Verify that the current user is the startup creator
-  if (foundStartup.creatorUser !== session.user.id) {
-    throw new Error("Only the startup creator can reject requests");
-  }
-
-  // Delete request connections
-  await Promise.all([
-    db.delete(schema.userToStartupRequest)
-      .where(eq(schema.userToStartupRequest.startupRequestId, requestIdNum)),
-    db.delete(schema.startupToStartupRequest)
-      .where(eq(schema.startupToStartupRequest.startupRequestId, requestIdNum)),
-  ]);
-
-  // Delete the request
-  await db.delete(schema.startupRequest)
-    .where(eq(schema.startupRequest.id, requestIdNum));
-  
-  // Update the startup to remove the request reference
-  await db.update(schema.startup)
-    .set({ startupRequestId: null })
-    .where(eq(schema.startup.id, foundStartup.id));
-
-  // Invalidate cache after rejecting request
-  invalidateCache.startupRelated(foundStartup.id);
-
-  return true;
 }
 
 // Client-side wrapper for requestToParticipate

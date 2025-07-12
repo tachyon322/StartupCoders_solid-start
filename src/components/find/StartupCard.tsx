@@ -32,7 +32,9 @@ export default function StartupCard(props: StartupCardProps): JSX.Element {
   // Format creation time
   const timeAgo = () => {
     if (props.createdAt) {
-      const date = typeof props.createdAt === "string" ? new Date(props.createdAt) : props.createdAt;
+      const date = typeof props.createdAt === "string"
+        ? new Date(props.createdAt + 'Z') // Add 'Z' to indicate UTC
+        : props.createdAt;
       return formatDistanceToNow(date, { addSuffix: true, locale: ru });
     }
     return null;
