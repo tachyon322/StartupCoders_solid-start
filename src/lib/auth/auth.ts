@@ -5,6 +5,12 @@ export const auth = betterAuth({
     database: new Pool({
         connectionString: process.env.DATABASE_URL,
     }),
+    baseURL: process.env.BETTER_AUTH_URL || "http://localhost:3000",
+    trustedOrigins: [
+        process.env.BETTER_AUTH_URL || "http://localhost:3000",
+        "http://startupcoders.ru",
+        "https://startupcoders.ru"
+    ],
     socialProviders: {
         github: {
             clientId: process.env.GITHUB_ID as string,
